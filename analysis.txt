@@ -1,0 +1,58 @@
+Analyzing 2 items...                                            
+
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/dialogs/home_dialogs.dart:41:35 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/dialogs/home_dialogs.dart:47:63 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/dialogs/home_dialogs.dart:133:59 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/dialogs/home_dialogs.dart:173:69 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/dialogs/home_dialogs.dart:175:85 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/dialogs/home_dialogs.dart:185:60 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/combined_group_bar_chart.dart:36:61 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/combined_group_bar_chart.dart:61:56 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/combined_group_bar_chart.dart:69:60 • deprecated_member_use
+warning • Unused import: 'package:fl_chart/fl_chart.dart' • lib/screens/home/widgets/credit_card_stack.dart:3:8 • unused_import
+   info • Parameter 'key' could be a super parameter • lib/screens/home/widgets/credit_card_stack.dart:24:9 • use_super_parameters
+   info • Parameter 'key' could be a super parameter • lib/screens/home/widgets/credit_card_stack.dart:291:9 • use_super_parameters
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/credit_card_stack.dart:322:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/credit_card_stack.dart:336:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/credit_card_stack.dart:362:49 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/credit_card_stack.dart:425:51 • deprecated_member_use
+   info • Statements in a for should be enclosed in a block • lib/screens/home/widgets/expense_line_chart.dart:46:39 • curly_braces_in_flow_control_structures
+   info • Statements in a for should be enclosed in a block • lib/screens/home/widgets/expense_line_chart.dart:47:40 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/screens/home/widgets/expense_line_chart.dart:110:29 • curly_braces_in_flow_control_structures
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/expense_line_chart.dart:222:42 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/expense_line_chart.dart:260:45 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/expense_line_chart.dart:286:47 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/expense_pie_chart.dart:30:76 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/expense_pie_chart.dart:178:72 • deprecated_member_use
+warning • Unused import: 'package:fl_chart/fl_chart.dart' • lib/screens/home/widgets/settings_drawer.dart:3:8 • unused_import
+warning • Unused import: '../../../features/expenses/presentation/bloc/expense_event.dart' • lib/screens/home/widgets/settings_drawer.dart:7:8 • unused_import
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/settings_drawer.dart:278:74 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/settings_drawer.dart:281:54 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/settings_drawer.dart:287:49 • deprecated_member_use
+   info • 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor or activeTrackColor instead. This feature was deprecated after v3.31.0-2.0.pre • lib/screens/home/widgets/settings_drawer.dart:333:23 • deprecated_member_use
+   info • Statements in an if should be enclosed in a block • lib/screens/home/widgets/settings_drawer.dart:338:29 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/screens/home/widgets/settings_drawer.dart:340:29 • curly_braces_in_flow_control_structures
+   info • Unnecessary use of 'toList' in a spread • lib/screens/home/widgets/settings_drawer.dart:347:16 • unnecessary_to_list_in_spreads
+   info • 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor or activeTrackColor instead. This feature was deprecated after v3.31.0-2.0.pre • lib/screens/home/widgets/settings_drawer.dart:420:21 • deprecated_member_use
+   info • Unnecessary use of 'toList' in a spread • lib/screens/home/widgets/settings_drawer.dart:580:16 • unnecessary_to_list_in_spreads
+   info • Statements in an if should be enclosed in a block • lib/screens/home/widgets/settings_drawer.dart:671:23 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/screens/home/widgets/settings_drawer.dart:673:23 • curly_braces_in_flow_control_structures
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/settings_drawer.dart:680:54 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/settings_drawer.dart:682:73 • deprecated_member_use
+   info • Statements in an if should be enclosed in a block • lib/screens/home/widgets/settings_drawer.dart:692:31 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/screens/home/widgets/settings_drawer.dart:694:31 • curly_braces_in_flow_control_structures
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/settings_drawer.dart:709:87 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/settings_drawer.dart:709:94 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/settings_drawer.dart:714:93 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/settings_drawer.dart:758:37 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/transaction_item.dart:84:70 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/transaction_item.dart:85:31 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/transaction_item.dart:89:72 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home/widgets/transaction_item.dart:90:33 • deprecated_member_use
+   info • 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion • lib/screens/home/widgets/transaction_item.dart:100:72 • deprecated_member_use
+warning • Unused import: '../features/expenses/domain/entities/expense.dart' • lib/screens/home_screen.dart:10:8 • unused_import
+  error • The named parameter 'emoji' is required, but there's no corresponding argument • lib/screens/home_screen.dart:241:32 • missing_required_argument
+  error • The named parameter 'entries' is required, but there's no corresponding argument • lib/screens/home_screen.dart:241:32 • missing_required_argument
+  error • The named parameter 'count' isn't defined • lib/screens/home_screen.dart:241:74 • undefined_named_parameter
+
+54 issues found. (ran in 1.7s)

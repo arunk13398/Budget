@@ -1,0 +1,56 @@
+{
+  "hosting": {
+    "site": "privacypolicyofspenderpro",
+    "public": "docs",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "cardbilling-11f48",
+          "appId": "1:1046388090425:android:f1f0877fc3af196b7f8fe8",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "cardbilling-11f48",
+          "appId": "1:1046388090425:ios:7a08c74ab377dad57f8fe8",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "cardbilling-11f48",
+          "appId": "1:1046388090425:ios:3a6c854e912720137f8fe8",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "cardbilling-11f48",
+          "configurations": {
+            "android": "1:1046388090425:android:f1f0877fc3af196b7f8fe8",
+            "ios": "1:1046388090425:ios:7a08c74ab377dad57f8fe8",
+            "macos": "1:1046388090425:ios:3a6c854e912720137f8fe8",
+            "web": "1:1046388090425:web:fc0bec3201bbc1527f8fe8",
+            "windows": "1:1046388090425:web:adc000ceca416ecd7f8fe8"
+          }
+        }
+      }
+    }
+  }
+}

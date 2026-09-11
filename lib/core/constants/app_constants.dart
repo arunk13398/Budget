@@ -1,0 +1,38 @@
+import 'package:flutter/material.dart';
+
+class AppConstants {
+  static const Map<String, List<Color>> themeGradients = {
+    'Ocean': [Color(0xFF1E40AF), Color(0xFF2563EB), Color(0xFF3B82F6)],
+    'Amethyst': [Color(0xFF5B21B6), Color(0xFF7C3AED), Color(0xFFC084FC)],
+    'Lavender': [Color(0xFF4C1D95), Color(0xFF6D28D9), Color(0xFFA78BFA)],
+    'Ruby': [Color(0xFF9F1239), Color(0xFFE11D48), Color(0xFFFB7185)],
+    'Coral': [Color(0xFFBE123C), Color(0xFFF43F5E), Color(0xFFFDA4AF)],
+    'Magenta': [Color(0xFF831843), Color(0xFFDB2777), Color(0xFFF472B6)],
+    'Sunset': [Color(0xFFC2410C), Color(0xFFEA580C), Color(0xFFFBBF24)],
+    'Indigo': [Color(0xFF312E81), Color(0xFF4F46E5), Color(0xFF818CF8)],
+    'Gold': [Color(0xFF78350F), Color(0xFFD97706), Color(0xFFFBBF24)],
+    'Forest': [Color(0xFF365314), Color(0xFF4D7C0F), Color(0xFF84CC16)],
+    'Midnight': [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
+    'Emerald': [Color(0xFF064E3B), Color(0xFF047857), Color(0xFF10B981)],
+    'Terracotta': [Color(0xFF7C2D12), Color(0xFFC2410C), Color(0xFFF97316)],
+    'Platinum': [Color(0xFF0C4A6E), Color(0xFF0284C7), Color(0xFF38BDF8)],
+    'Graphite': [Color(0xFF1E293B), Color(0xFF334155), Color(0xFF64748B)],
+    'Obsidian': [Color(0xFF18181B), Color(0xFF27272A), Color(0xFF3F3F46)],
+    'Mocha': [Color(0xFF451A03), Color(0xFF78350F), Color(0xFF92400E)],
+    'Cyan': [Color(0xFF0891B2), Color(0xFF06B6D4), Color(0xFF67E8F9)],
+    'Teal': [Color(0xFF0F766E), Color(0xFF14B8A6), Color(0xFF5EEAD4)],
+    'Turquoise': [Color(0xFF115E59), Color(0xFF0D9488), Color(0xFF2DD4BF)],
+    'Olive': [Color(0xFF3F6212), Color(0xFF65A30D), Color(0xFFA3E635)],
+    'DeepTeal': [Color(0xFF134E4A), Color(0xFF0F766E), Color(0xFF2DD4BF)],
+    'Taupe': [Color(0xFF57534E), Color(0xFF78716C), Color(0xFFA8A29E)],
+    'RoyalIndigo': [Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF4338CA)],
+    'ElectricBlue': [Color(0xFF1D4ED8), Color(0xFF3B82F6), Color(0xFF60A5FA)],
+    'Espresso': [Color(0xFF292524), Color(0xFF44403C), Color(0xFF78716C)],
+    'NeonViolet': [Color(0xFF7000FF), Color(0xFF8B5CF6), Color(0xFFA78BFA)],
+    'DuoPurple': [Color(0xFF6B21A8), Color(0xFFA855F7), Color(0xFFE9D5FF)],
+    'RoseCrimson': [Color(0xFF881337), Color(0xFFBE123C), Color(0xFFF43F5E)],
+    'NeonPink': [Color(0xFF9D174D), Color(0xFFEC4899), Color(0xFFF472B6)],
+    'Tangerine': [Color(0xFF9A3412), Color(0xFFEA580C), Color(0xFFF97316)],
+    'SkyBlue': [Color(0xFF0369A1), Color(0xFF0284C7), Color(0xFF38BDF8)],
+  };
+}

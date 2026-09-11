@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_bg"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:paddingLeft="20dp"
+    android:paddingRight="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="16dp">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/tv_card_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toStartOf="@+id/btn_sync"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="SBI Credit Card"
+            android:textColor="#9E9E9E"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/btn_sync"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:padding="4dp"
+            android:src="@android:drawable/ic_popup_sync"
+            android:alpha="0.6" />
+    </RelativeLayout>
+
+    <TextView
+        android:id="@+id/tv_month_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/widget_badge_cyan"
+        android:paddingLeft="10dp"
+        android:paddingRight="10dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:text="JAN"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_current_value"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="₹8000"
+        android:textColor="#000000"
+        android:textSize="36sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Limit"
+                android:textColor="#9E9E9E"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_max_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="₹21000"
+                android:textColor="#000000"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Remaining"
+                android:textColor="#9E9E9E"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_remaining_budget"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="₹13000"
+                android:textColor="#000000"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp">
+        <ProgressBar
+            android:id="@+id/progress_bar_blue"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
+            android:max="100"
+            android:progress="0"
+            android:visibility="gone"
+            android:progressDrawable="@drawable/widget_progress_bar_blue" />
+        <ProgressBar
+            android:id="@+id/progress_bar_green"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
+            android:max="100"
+            android:progress="0"
+            android:visibility="gone"
+            android:progressDrawable="@drawable/widget_progress_bar_green" />
+        <ProgressBar
+            android:id="@+id/progress_bar_orange"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
+            android:max="100"
+            android:progress="0"
+            android:visibility="gone"
+            android:progressDrawable="@drawable/widget_progress_bar_orange" />
+        <ProgressBar
+            android:id="@+id/progress_bar_red"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
+            android:max="100"
+            android:progress="0"
+            android:visibility="gone"
+            android:progressDrawable="@drawable/widget_progress_bar_red" />
+    </FrameLayout>
+</LinearLayout>
