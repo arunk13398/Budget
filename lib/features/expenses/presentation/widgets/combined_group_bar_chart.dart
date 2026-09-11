@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../features/expenses/domain/entities/expense.dart';
+import '../../domain/entities/expense.dart';
 
 class CombinedGroupBarChart extends StatelessWidget {
   final List<Expense> debitExpenses;
@@ -34,7 +34,7 @@ class CombinedGroupBarChart extends StatelessWidget {
     final List<String> displayGroups = activeGroups;
 
     final double totalSpent = activeGroups.fold(0.0, (sum, group) => sum + (groupSpending[group] ?? 0.0));
-    
+
     double maxChartValue = totalSpent;
     for (var group in activeGroups) {
       final spent = groupSpending[group] ?? 0.0;
@@ -42,7 +42,7 @@ class CombinedGroupBarChart extends StatelessWidget {
       if (spent > maxChartValue) maxChartValue = spent;
       if (limit > maxChartValue) maxChartValue = limit;
     }
-    
+
     if (maxChartValue == 0) {
       maxChartValue = totalBudget > 0 ? totalBudget : 1000;
     }

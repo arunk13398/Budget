@@ -56,7 +56,7 @@ class _CustomBlueDatePickerDialogState
     final daysInMonth =
         DateTime(_displayedMonth.year, _displayedMonth.month + 1, 0).day;
     final firstWeekday =
-        DateTime(_displayedMonth.year, _displayedMonth.month, 1).weekday; // 1 = Mon, 7 = Sun
+        DateTime(_displayedMonth.year, _displayedMonth.month, 1).weekday;
     final prevMonthDays =
         DateTime(_displayedMonth.year, _displayedMonth.month, 0).day;
 
@@ -67,7 +67,6 @@ class _CustomBlueDatePickerDialogState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Inner White Card Body
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -77,7 +76,6 @@ class _CustomBlueDatePickerDialogState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Month & Year Selector Pills Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -212,7 +210,6 @@ class _CustomBlueDatePickerDialogState
                 ),
                 const SizedBox(height: 16),
 
-                // Weekdays Header (MO, TU, WE, TH, FR, SA, SU)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: const ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
@@ -221,7 +218,7 @@ class _CustomBlueDatePickerDialogState
                           child: Center(
                             child: Text(
                               day,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF94A3B8),
@@ -234,7 +231,6 @@ class _CustomBlueDatePickerDialogState
                 ),
                 const SizedBox(height: 10),
 
-                // Calendar Days Grid (7 columns)
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -316,7 +312,6 @@ class _CustomBlueDatePickerDialogState
                 ),
                 const SizedBox(height: 16),
 
-                // Action Buttons: Confirm & Cancel
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

@@ -17,15 +17,15 @@ class WarningBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB), // Elegant soft amber background
+        color: const Color(0xFFFFFBEB),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFFCD34D), // Soft amber border
+          color: const Color(0xFFFCD34D),
           width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFD97706).withOpacity(0.04),
+            color: const Color(0xFFD97706).withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -46,7 +46,7 @@ class WarningBox extends StatelessWidget {
             ),
             child: const Icon(
               Icons.warning_amber_rounded,
-              color: Color(0xFFD97706), // Classic gold amber warning color
+              color: Color(0xFFD97706),
               size: 18,
             ),
           ),

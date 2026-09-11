@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../../core/constants/app_constants.dart';
 
 class ExpensePieChart extends StatelessWidget {
   final Map<String, double> cardLimits;
@@ -19,12 +19,12 @@ class ExpensePieChart extends StatelessWidget {
   });
 
   static const List<Color> _defaultPalette = [
-    Color(0xFF2563EB), // Vibrant Blue
-    Color(0xFF10B981), // Emerald Green
-    Color(0xFF9333EA), // Royal Purple
-    Color(0xFFF59E0B), // Amber
-    Color(0xFFEC4899), // Hot Pink
-    Color(0xFF06B6D4), // Cyan
+    Color(0xFF2563EB),
+    Color(0xFF10B981),
+    Color(0xFF9333EA),
+    Color(0xFFF59E0B),
+    Color(0xFFEC4899),
+    Color(0xFF06B6D4),
   ];
 
   String _formatAmount(double amount) {
@@ -126,7 +126,7 @@ class ExpensePieChart extends StatelessWidget {
                     ],
                   ),
                 ),
-                SizedBox(width: 22,),
+                const SizedBox(width: 22),
                 Expanded(
                   flex: 3,
                   child: SingleChildScrollView(
@@ -142,7 +142,6 @@ class ExpensePieChart extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 5),
-                        // CARDS Section
                         if (cardLimits.isNotEmpty) ...[
                           const Text(
                             'CARDS',
@@ -197,7 +196,6 @@ class ExpensePieChart extends StatelessWidget {
                           ),
                         ],
 
-                        // GROUPS Section
                         if (groupLimits.isNotEmpty) ...[
                           const Text(
                             'GROUPS',
@@ -235,7 +233,7 @@ class ExpensePieChart extends StatelessWidget {
                                   Expanded(
                                     child: Text(
                                       label,
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 1,
@@ -245,7 +243,7 @@ class ExpensePieChart extends StatelessWidget {
                                   ),
                                   Text(
                                     _formatAmount(limit),
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 9,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 1,
@@ -260,7 +258,6 @@ class ExpensePieChart extends StatelessWidget {
                             child: Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0)),
                           ),
                         ],
-                        // REMAINING Section
                         Row(
                           children: [
                             Container(
@@ -284,7 +281,7 @@ class ExpensePieChart extends StatelessWidget {
                             ),
                             Text(
                               _formatAmount(unallocated),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 1,
@@ -330,7 +327,7 @@ class ExpensePieChart extends StatelessWidget {
     if (unallocated > 0 || sections.isEmpty) {
       sections.add(
         PieChartSectionData(
-          color: const Color(0xFFF1F5F9), // Subtle light grey slice
+          color: const Color(0xFFF1F5F9),
           value: unallocated > 0 ? unallocated : (totalBudget > 0 ? totalBudget : 1.0),
           title: '',
           radius: 40,

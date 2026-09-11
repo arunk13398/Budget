@@ -2,13 +2,15 @@ import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'features/expenses/data/adapters/expense_model_adapter.dart';
+import 'features/expenses/data/datasources/expense_local_data_source.dart';
+import 'features/expenses/data/datasources/settings_local_data_source.dart';
 import 'features/expenses/data/models/expense_model.dart';
 import 'features/expenses/data/repositories/expense_repository_impl.dart';
 import 'features/expenses/domain/repositories/expense_repository.dart';
 import 'features/expenses/domain/usecases/add_expense_usecase.dart';
 import 'features/expenses/domain/usecases/get_expenses_usecase.dart';
 import 'features/expenses/domain/usecases/delete_expense_usecase.dart';
-import 'features/expenses/presentation/bloc/expense_bloc.dart';
+
 import 'core/services/sms_service.dart';
 
 final sl = GetIt.instance;
@@ -47,22 +49,27 @@ Future<void> init() async {
     sl.registerLazySingleton(() => sharedPreferences);
   }
 
+  // Data Sources
+  if (!sl.isRegistered<ExpenseLocalDataSource>()) {
+    sl.registerLazySingleton<ExpenseLocalDataSource>(
+      () => ExpenseLocalDataSourceImpl(expensesBox: sl()),
+    );
+  }
+  if (!sl.isRegistered<SettingsLocalDataSource>()) {
+    sl.registerLazySingleton<SettingsLocalDataSource>(
+      () => SettingsLocalDataSourceImpl(
+        settingsBox: sl(),
+        sharedPreferences: sl(),
+      ),
+    );
+  }
+
   // Services
   if (!sl.isRegistered<SmsService>()) {
     sl.registerLazySingleton(() => SmsService(sl()));
   }
   
-  // Blocs
-  if (!sl.isRegistered<ExpenseBloc>()) {
-    sl.registerFactory(
-      () => ExpenseBloc(
-        addExpenseUseCase: sl(),
-        getExpensesUseCase: sl(),
-        deleteExpenseUseCase: sl(),
-        smsService: sl(),
-      ),
-    );
-  }
+
 
   // Use cases
   if (!sl.isRegistered<AddExpenseUseCase>()) {
@@ -79,9 +86,8 @@ Future<void> init() async {
   if (!sl.isRegistered<ExpenseRepository>()) {
     sl.registerLazySingleton<ExpenseRepository>(
       () => ExpenseRepositoryImpl(
-        expensesBox: sl(),
-        settingsBox: sl(),
-        sharedPreferences: sl(),
+        expenseLocalDataSource: sl(),
+        settingsLocalDataSource: sl(),
       ),
     );
   }

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../features/expenses/presentation/bloc/expense_bloc.dart';
-import '../../../features/expenses/presentation/bloc/expense_event.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/expense_provider.dart';
 
-void showDeleteConfirmation(BuildContext context, String id) {
+void showDeleteConfirmation(BuildContext context, WidgetRef ref, String id) {
   showDialog(
     context: context,
     builder: (context) {
@@ -84,7 +83,7 @@ void showDeleteConfirmation(BuildContext context, String id) {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        context.read<ExpenseBloc>().add(DeleteExpenseEvent(id));
+                        ref.read(expenseNotifierProvider.notifier).deleteExpense(id);
                         Navigator.pop(context);
                       },
                       style: ElevatedButton.styleFrom(

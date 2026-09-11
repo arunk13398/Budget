@@ -2,7 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import '../../../features/expenses/domain/entities/expense.dart';
+import '../../domain/entities/expense.dart';
 
 class TransactionItem extends StatelessWidget {
   final Expense expense;
@@ -54,7 +54,7 @@ class TransactionItem extends StatelessWidget {
         ? gradient.colors.first
         : (groupLabel != null && groupColors.containsKey(groupLabel)
             ? Color(groupColors[groupLabel]!)
-            : const Color(0xFF475569)); // Charcoal Slate
+            : const Color(0xFF475569));
 
     return Container(
       width: 36,
@@ -88,7 +88,6 @@ class TransactionItem extends StatelessWidget {
     final isCredit = expense.type == 'credited';
     final bool isUpi = expense.name.toUpperCase().contains('UPI') || expense.bank.toUpperCase().contains('UPI');
     
-    // Remove (UPI) from the merchant name display so it's not redundant
     String displayName = expense.name.replaceAll(RegExp(r'\s*\(?UPI\)?', caseSensitive: false), '').trim();
     if (displayName.isEmpty || displayName == 'Manual Entry') {
       displayName = expense.bank.isNotEmpty ? expense.bank : 'Manual Entry';
@@ -137,7 +136,7 @@ class TransactionItem extends StatelessWidget {
             },
             label: 'Dlt',
             backgroundColor: Colors.red.withValues(alpha: 0.15),
-            foregroundColor:Colors.red,
+            foregroundColor: Colors.red,
             icon: Icons.delete_outline,
             borderRadius: BorderRadius.circular(12),
             autoClose: true,

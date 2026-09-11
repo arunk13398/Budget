@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../features/expenses/presentation/bloc/expense_bloc.dart';
-import '../../../features/expenses/presentation/bloc/expense_state.dart';
-import '../../../features/expenses/presentation/bloc/expense_event.dart';
-import '../../../core/services/sms_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'custom_blue_date_picker_dialog.dart';
+import '../providers/expense_provider.dart';
+import '../providers/expense_state.dart';
+import '../../../../core/services/sms_service.dart';
+import '../dialogs/custom_blue_date_picker_dialog.dart';
 
-class SettingsDrawer extends StatefulWidget {
+class SettingsDrawer extends ConsumerStatefulWidget {
   final List<String> visibleCards;
   final List<String> selectedExpenseNames;
   final String? editingCardName;
@@ -56,10 +54,10 @@ class SettingsDrawer extends StatefulWidget {
   });
 
   @override
-  State<SettingsDrawer> createState() => _SettingsDrawerState();
+  ConsumerState<SettingsDrawer> createState() => _SettingsDrawerState();
 }
 
-class _SettingsDrawerState extends State<SettingsDrawer> {
+class _SettingsDrawerState extends ConsumerState<SettingsDrawer> {
   late List<String> _tempVisibleCards;
   late List<String> _tempSelectedExpenseNames;
   String? _tempEditingCardName;
@@ -131,8 +129,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     ),
                   ),
                   Expanded(
-                    child: BlocBuilder<ExpenseBloc, ExpenseState>(
-                      builder: (context, state) {
+                    child: Builder(
+                      builder: (context) {
+                        final state = ref.watch(expenseNotifierProvider);
                         return TabBarView(
                           children: _tempVisibleCards.isEmpty
                               ? [_buildTempConfigureTab(setDrawerState)]
@@ -278,12 +277,15 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               final isSelected = _tempVisibleCards.contains(group.label);
 
               IconData bankIcon = Icons.account_balance_wallet_outlined;
-              if (group.label.toUpperCase().contains('SBI'))
+              if (group.label.toUpperCase().contains('SBI')) {
                 bankIcon = Icons.account_balance_outlined;
-              if (group.label.toUpperCase().contains('AXIS'))
+              }
+              if (group.label.toUpperCase().contains('AXIS')) {
                 bankIcon = Icons.credit_card_outlined;
-              if (group.label.toUpperCase().contains('HDFC'))
+              }
+              if (group.label.toUpperCase().contains('HDFC')) {
                 bankIcon = Icons.payments_outlined;
+              }
 
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -368,7 +370,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                       },
                     ),
                   ],
-              ));
+                ),
+              );
             }),
           const SizedBox(height: 20),
           Material(
@@ -457,7 +460,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          // Card Selection
           SizedBox(
             height: 40,
             child: ListView.builder(
@@ -798,8 +800,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   Widget _buildTempFilterTab(StateSetter setDrawerState, ExpenseState state) {
-    if (state is! ExpenseLoaded)
+    if (state is! ExpenseLoaded) {
       return const Center(child: CircularProgressIndicator());
+    }
 
     final normalizedCardName = _tempEditingCardName?.toUpperCase() ?? '';
     final cardExpenses = state.data.expenses.where((e) {

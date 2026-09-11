@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
+  static const List<String> months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
   static const Map<String, List<Color>> themeGradients = {
     'Ocean': [Color(0xFF1E40AF), Color(0xFF2563EB), Color(0xFF3B82F6)],
     'Amethyst': [Color(0xFF5B21B6), Color(0xFF7C3AED), Color(0xFFC084FC)],

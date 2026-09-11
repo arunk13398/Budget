@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../../features/expenses/domain/entities/expense.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../domain/entities/expense.dart';
 
 class ExpenseLineChart extends StatelessWidget {
   final List<Expense> debitExpenses;
@@ -31,7 +31,6 @@ class ExpenseLineChart extends StatelessWidget {
     this.cardTheme,
   });
 
-  /// Aggregates expenses into 5 weekly buckets (W1–W5).
   Map<int, double> _computeWeeklyTotals(List<Expense> list) {
     final Map<int, double> totals = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
     for (final expense in list) {
@@ -55,7 +54,6 @@ class ExpenseLineChart extends StatelessWidget {
         .map((e) => FlSpot(e.key.toDouble(), e.value / 1000))
         .toList();
 
-    // Compute cumulative weekly data
     final Map<int, double> cumulativeWeekly = {};
     double runningSum = 0.0;
     final sortedKeys = debitWeekly.keys.toList()..sort();
@@ -392,7 +390,6 @@ class ExpenseLineChart extends StatelessWidget {
                           ),
                         ),
                       ),
-                    // Cumulative Debit Bar (sum of all list money increasing)
                     LineChartBarData(
                       spots: cumulativeSpots,
                       isCurved: true,

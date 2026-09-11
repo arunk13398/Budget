@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../constants.dart';
+import '../../../../core/constants/app_constants.dart';
 
 class MonthSelector extends StatelessWidget {
   final int selectedMonth;
@@ -16,7 +16,7 @@ class MonthSelector extends StatelessWidget {
     return SizedBox(
       height: 35,
       child: ListView.builder(
-        itemCount: months.length,
+        itemCount: AppConstants.months.length,
         scrollDirection: Axis.horizontal,
         itemBuilder: (context, index) {
           final isSelected = index == selectedMonth;
@@ -35,7 +35,7 @@ class MonthSelector extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  months[index],
+                  AppConstants.months[index],
                   style: TextStyle(
                     color: isSelected
                         ? Colors.white

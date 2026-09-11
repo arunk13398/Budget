@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:hive/hive.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/entities/expense_data.dart';
 import '../../domain/repositories/expense_repository.dart';
+import '../datasources/expense_local_data_source.dart';
+import '../datasources/settings_local_data_source.dart';
 import '../models/expense_model.dart';
 import '../../../../core/services/encryption_service.dart';
 import '../../../../core/services/sms_service.dart';
@@ -54,7 +54,6 @@ List<ExpenseModel> _parseExpensesIsolate(String encryptedJson) {
       continue;
     }
 
-    // Sanitize any legacy generic or 'a' merchant names
     var cleanName = e.name.trim();
     if (cleanName.toLowerCase() == 'a' || cleanName.toLowerCase() == 'a/c' || cleanName.toLowerCase() == 'from a/c') {
       cleanName = 'Transaction';
@@ -70,7 +69,6 @@ List<ExpenseModel> _parseExpensesIsolate(String encryptedJson) {
       type: e.type,
     );
 
-    // 2-minute time window deduplication for same bank & amount
     final dupIndex = deduplicated.indexWhere((existing) =>
       existing.bank.toUpperCase() == modelItem.bank.toUpperCase() &&
       existing.amount == modelItem.amount &&
@@ -90,9 +88,8 @@ List<ExpenseModel> _parseExpensesIsolate(String encryptedJson) {
 }
 
 class ExpenseRepositoryImpl implements ExpenseRepository {
-  final Box<ExpenseModel> expensesBox;
-  final Box<dynamic> settingsBox;
-  final SharedPreferences? sharedPreferences;
+  final ExpenseLocalDataSource expenseLocalDataSource;
+  final SettingsLocalDataSource settingsLocalDataSource;
   final StreamController<ExpenseData> _controller = StreamController<ExpenseData>.broadcast();
   
   List<Expense>? _cachedExpenses;
@@ -102,9 +99,8 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   static const String _kLimitKey = 'local_limit';
 
   ExpenseRepositoryImpl({
-    required this.expensesBox,
-    required this.settingsBox,
-    this.sharedPreferences,
+    required this.expenseLocalDataSource,
+    required this.settingsLocalDataSource,
   }) {
     _initStorage();
   }
@@ -115,33 +111,29 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   }
 
   Future<void> _migrateLegacyDataIfNeeded() async {
-    if (sharedPreferences == null) return;
-
-    final String? legacyEncrypted = sharedPreferences!.getString(_kExpensesKey);
-    if (expensesBox.isEmpty && legacyEncrypted != null && legacyEncrypted.isNotEmpty) {
+    final String? legacyEncrypted = settingsLocalDataSource.getLegacyExpensesString(_kExpensesKey);
+    if (expenseLocalDataSource.isEmpty() && legacyEncrypted != null && legacyEncrypted.isNotEmpty) {
       final List<ExpenseModel> deduplicated = await compute(_parseExpensesIsolate, legacyEncrypted);
-      for (var expense in deduplicated) {
-        await expensesBox.put(expense.id, expense);
-      }
-      await sharedPreferences!.remove(_kExpensesKey);
+      await expenseLocalDataSource.saveExpenses(deduplicated);
+      await settingsLocalDataSource.removeLegacyKey(_kExpensesKey);
     }
 
-    final double? legacyLimit = sharedPreferences!.getDouble(_kLimitKey);
-    if (settingsBox.get(_kLimitKey) == null && legacyLimit != null) {
-      await settingsBox.put(_kLimitKey, legacyLimit);
-      await sharedPreferences!.remove(_kLimitKey);
+    final double? legacyLimit = settingsLocalDataSource.getLegacyLimitDouble(_kLimitKey);
+    if (legacyLimit != null) {
+      await settingsLocalDataSource.saveLimit(legacyLimit);
+      await settingsLocalDataSource.removeLegacyKey(_kLimitKey);
     }
   }
 
   List<Expense> _getRawExpenses() {
     if (_cachedExpenses != null) return List.from(_cachedExpenses!);
-    _cachedExpenses = expensesBox.values.toList();
+    _cachedExpenses = expenseLocalDataSource.getExpenses();
     return List.from(_cachedExpenses!);
   }
 
   double _getRawLimit() {
     if (_cachedLimit != null) return _cachedLimit!;
-    _cachedLimit = (settingsBox.get(_kLimitKey, defaultValue: 80000.0) as num).toDouble();
+    _cachedLimit = settingsLocalDataSource.getLimit();
     return _cachedLimit!;
   }
 
@@ -177,10 +169,9 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       final index = expenses.indexWhere((e) => e.id == model.id);
       if (index != -1) {
         expenses[index] = model;
-        await expensesBox.put(model.id, model);
+        await expenseLocalDataSource.saveExpense(model);
         changed = true;
       } else {
-        // 2-minute time window deduplication for same bank & amount
         final dupIndex = expenses.indexWhere((e) =>
           e.bank.toUpperCase() == model.bank.toUpperCase() &&
           e.amount == model.amount &&
@@ -190,12 +181,12 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
         if (dupIndex != -1) {
           if (_isBetterMerchantName(model.name, expenses[dupIndex].name)) {
             expenses[dupIndex] = model;
-            await expensesBox.put(model.id, model);
+            await expenseLocalDataSource.saveExpense(model);
             changed = true;
           }
         } else {
           expenses.add(model);
-          await expensesBox.put(model.id, model);
+          await expenseLocalDataSource.saveExpense(model);
           changed = true;
         }
       }
@@ -215,16 +206,14 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   
   Future<void> updateLimit(double limit) async {
     _cachedLimit = limit;
-    await settingsBox.put(_kLimitKey, limit);
+    await settingsLocalDataSource.saveLimit(limit);
     _emitLatest();
   }
 
   @override
   Future<void> deleteExpense(String id) async {
-    if (expensesBox.containsKey(id)) {
-      await expensesBox.delete(id);
-      _cachedExpenses = expensesBox.values.toList();
-      _emitLatest();
-    }
+    await expenseLocalDataSource.deleteExpense(id);
+    _cachedExpenses = expenseLocalDataSource.getExpenses();
+    _emitLatest();
   }
 }

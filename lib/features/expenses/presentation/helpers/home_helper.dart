@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../features/expenses/presentation/bloc/expense_bloc.dart';
-import '../features/expenses/presentation/bloc/expense_event.dart';
-import '../features/expenses/presentation/bloc/expense_state.dart';
-import '../features/expenses/domain/entities/expense.dart';
-import 'home/widgets/custom_blue_date_picker_dialog.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/expense_provider.dart';
+import '../providers/expense_state.dart';
+import '../../domain/entities/expense.dart';
+import '../dialogs/custom_blue_date_picker_dialog.dart';
 
 Future<void> addAlertDialog({
   required BuildContext context,
+  required WidgetRef ref,
   required List<String> visibleBanks,
   String? initialBank,
   Map<String, int>? groupColors,
@@ -98,7 +98,7 @@ Future<void> addAlertDialog({
     );
   }
 
-  final expenseState = context.read<ExpenseBloc>().state;
+  final expenseState = ref.read(expenseNotifierProvider);
   List<Expense> expenses = [];
   if (expenseState is ExpenseLoaded) {
     expenses = expenseState.data.expenses;
@@ -155,7 +155,6 @@ Future<void> addAlertDialog({
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header Badge & Title
                     Row(
                       children: [
                         Container(
@@ -210,7 +209,6 @@ Future<void> addAlertDialog({
                     ),
                     const SizedBox(height: 10),
 
-                    // Amount & Date Row
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -274,7 +272,6 @@ Future<void> addAlertDialog({
                         ),
                         const SizedBox(width: 12),
 
-                        // Date Selector Button
                         InkWell(
                           onTap: () async {
                             final now = DateTime.now();
@@ -304,7 +301,7 @@ Future<void> addAlertDialog({
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.calendar_month_rounded,
                                   size: 18,
                                   color: Colors.black,
@@ -326,7 +323,6 @@ Future<void> addAlertDialog({
                     ),
                     const SizedBox(height: 16),
 
-                    // TRANSACTION TYPE Selection (Debited vs Credited)
                     const Text(
                       'TRANSACTION TYPE',
                       style: TextStyle(
@@ -464,7 +460,6 @@ Future<void> addAlertDialog({
                     ),
                     const SizedBox(height: 14),
 
-                    // Merchant Input
                     TextFormField(
                       controller: merchantController,
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
@@ -493,10 +488,9 @@ Future<void> addAlertDialog({
                     ),
                     const SizedBox(height: 20),
 
-                    // SOURCE Bank Chips
                     Row(
-                      children: [
-                        const Text(
+                      children: const [
+                        Text(
                           'SOURCE',
                           style: TextStyle(
                             fontSize: 10.5,
@@ -505,7 +499,7 @@ Future<void> addAlertDialog({
                             letterSpacing: 1.2,
                           ),
                         ),
-                        const Text(
+                        Text(
                           ' *',
                           style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                         ),
@@ -564,7 +558,6 @@ Future<void> addAlertDialog({
                       ),
                     ],
 
-                    // CATEGORY LABEL
                     if (selectedTransactionType == 'debited' && groupColors != null && groupColors.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       const Text(
@@ -637,7 +630,6 @@ Future<void> addAlertDialog({
                       ),
                     ],
 
-                    // MOST USED MERCHANTS
                     if (selectedTransactionType == 'debited' && topMerchants.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       const Text(
@@ -770,9 +762,7 @@ Future<void> addAlertDialog({
                                   selectedGroup!,
                                 );
                               }
-                              context.read<ExpenseBloc>().add(
-                                AddExpenseEvent(expense),
-                              );
+                              ref.read(expenseNotifierProvider.notifier).addExpense(expense);
                               Navigator.pop(context);
                             },
                             child: Text(

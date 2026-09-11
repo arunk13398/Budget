@@ -6,34 +6,33 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:flip_card/flip_card.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../core/services/encryption_service.dart';
-import '../features/expenses/presentation/bloc/expense_bloc.dart';
-import '../features/expenses/presentation/bloc/expense_event.dart';
-import '../features/expenses/presentation/bloc/expense_state.dart';
+import '../../../../core/services/encryption_service.dart';
+import '../providers/expense_provider.dart';
+import '../providers/expense_state.dart';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/rendering.dart';
-import '../features/expenses/domain/entities/expense.dart';
+import '../../domain/entities/expense.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'helper.dart';
-import 'home/widgets/combined_group_bar_chart.dart';
-import 'home/widgets/expense_line_chart.dart';
-import 'home/widgets/expense_pie_chart.dart';
-import 'home/widgets/transaction_item.dart';
-import 'home/widgets/warning_box.dart';
-import '../core/services/sms_service.dart';
-import '../core/constants/app_constants.dart';
-import 'home/widgets/custom_blue_date_picker_dialog.dart';
-import '../features/expenses/domain/repositories/expense_repository.dart';
-import '../injection_container.dart' as di;
+import '../helpers/home_helper.dart';
+import '../widgets/combined_group_bar_chart.dart';
+import '../widgets/expense_line_chart.dart';
+import '../widgets/expense_pie_chart.dart';
+import '../widgets/transaction_item.dart';
+import '../widgets/warning_box.dart';
+import '../../../../core/services/sms_service.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../dialogs/custom_blue_date_picker_dialog.dart';
+import '../../domain/repositories/expense_repository.dart';
+import '../../../../injection_container.dart' as di;
 
 @pragma('vm:entry-point')
 Future<void> backgroundCallback(Uri? uri) async {
@@ -60,14 +59,14 @@ Future<void> backgroundCallback(Uri? uri) async {
   }
 }
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _monthScrollController = ScrollController();
   bool _isSyncing = false;
@@ -593,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     if (syncedCount > 0 && mounted) {
       await _loadBankGroups();
-      context.read<ExpenseBloc>().add(LoadExpensesEvent());
+      ref.read(expenseNotifierProvider.notifier).loadExpenses();
       _scheduleWidgetUpdate();
       _showCustomSyncToast(count: syncedCount);
     }
@@ -613,7 +612,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       onExpenseAutoSynced: (expense) async {
         await _loadBankGroups();
         if (mounted) {
-          context.read<ExpenseBloc>().add(LoadExpensesEvent());
+          ref.read(expenseNotifierProvider.notifier).loadExpenses();
           _scheduleWidgetUpdate();
           _showCustomSyncToast(expense: expense);
         }
@@ -626,7 +625,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     if (mounted) {
-      context.read<ExpenseBloc>().add(LoadExpensesEvent());
+      ref.read(expenseNotifierProvider.notifier).loadExpenses();
     }
 
     // Sync any pending bank notifications captured in the native cache queue while app was closed/killed
@@ -635,7 +634,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     if (syncedCount > 0 && mounted) {
       await _loadBankGroups();
-      context.read<ExpenseBloc>().add(LoadExpensesEvent());
+      ref.read(expenseNotifierProvider.notifier).loadExpenses();
       _scheduleWidgetUpdate();
       _showCustomSyncToast(count: syncedCount);
     }
@@ -825,7 +824,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       await _loadBankGroups();
       if (mounted) {
-        context.read<ExpenseBloc>().add(LoadExpensesEvent());
+        ref.read(expenseNotifierProvider.notifier).loadExpenses();
       }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
@@ -4250,7 +4249,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _updateWidget() async {
     if (kIsWeb) return;
-    final state = context.read<ExpenseBloc>().state;
+    final state = ref.read(expenseNotifierProvider);
     if (state is! ExpenseLoaded || visibleCards.isEmpty) return;
     final allExpenses = state.data.expenses;
 
@@ -4455,49 +4454,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final gradientColors = getCardThemeGradient(cardName);
 
-    return BlocConsumer<ExpenseBloc, ExpenseState>(
-      listener: (context, state) {
-        if (state is ExpenseLoaded) {
-          // Filter for the currently selected month
-          final filteredForMonth = state.data.expenses.where((expense) {
-            bool matchesMonth =
-                expense.date.month == (selectedMonth + 1) &&
-                expense.date.year == DateTime.now().year;
-            bool isNotUnread = _getGroupForExpense(expense) != 'Unread';
-            return matchesMonth && isNotUnread;
-          }).toList();
-          final totalAmount = filteredForMonth.fold(
-            0.0,
-            (sum, item) => sum + item.amount,
-          );
-          _updateWidget();
-          _checkBoundaryAlerts(state);
-        }
-      },
-      builder: (context, state) {
-        double totalAmount = 0.0;
-        if (state is ExpenseLoaded) {
-          final filteredForMonth = state.data.expenses.where((expense) {
-            bool matchesMonth =
-                expense.date.month == (selectedMonth + 1) &&
-                expense.date.year == DateTime.now().year;
-            final normalizedName = expense.name.trim().toUpperCase();
-            final groupLabel = _getGroupForExpense(expense);
-            bool matchesName =
-                selectedExpenseNames.isEmpty ||
-                selectedExpenseNames.contains(normalizedName) ||
-                (groupLabel != null &&
-                    selectedExpenseNames.contains(groupLabel));
-            bool isNotUnread = _getGroupForExpense(expense) != 'Unread';
-            return matchesMonth && matchesName && isNotUnread;
-          }).toList();
-          totalAmount = filteredForMonth.fold(
-            0.0,
-            (sum, item) => sum + item.amount,
-          );
-        }
+    ref.listen<ExpenseState>(expenseNotifierProvider, (previous, next) {
+      if (next is ExpenseLoaded) {
+        _updateWidget();
+        _checkBoundaryAlerts(next);
+      }
+    });
 
-        return Scaffold(
+    final state = ref.watch(expenseNotifierProvider);
+
+    double totalAmount = 0.0;
+    if (state is ExpenseLoaded) {
+      final filteredForMonth = state.data.expenses.where((expense) {
+        bool matchesMonth =
+            expense.date.month == (selectedMonth + 1) &&
+            expense.date.year == DateTime.now().year;
+        final normalizedName = expense.name.trim().toUpperCase();
+        final groupLabel = _getGroupForExpense(expense);
+        bool matchesName =
+            selectedExpenseNames.isEmpty ||
+            selectedExpenseNames.contains(normalizedName) ||
+            (groupLabel != null &&
+                selectedExpenseNames.contains(groupLabel));
+        bool isNotUnread = _getGroupForExpense(expense) != 'Unread';
+        return matchesMonth && matchesName && isNotUnread;
+      }).toList();
+      totalAmount = filteredForMonth.fold(
+        0.0,
+        (sum, item) => sum + item.amount,
+      );
+    }
+
+    return Scaffold(
           key: _scaffoldKey,
           backgroundColor: Colors.grey.shade50,
           endDrawer: Drawer(
@@ -4676,9 +4664,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     Navigator.pop(context);
                                     _scheduleWidgetUpdate();
                                     _saveSettings();
-                                    context.read<ExpenseBloc>().add(
-                                      SetValueEvent(true),
-                                    );
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.black,
@@ -4894,110 +4879,101 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                     // Restore Warning Box
                     if (state is ExpenseLoaded)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 15,
-                          vertical: 5,
-                        ),
-                        child: BlocListener<ExpenseBloc, ExpenseState>(
-                          listener: (context, state) {
-                            if (state is ExpenseLoaded) {
-                              _scheduleWidgetUpdate();
-                            }
-                          },
-                          child: BlocBuilder<ExpenseBloc, ExpenseState>(
-                            builder: (context, state) {
-                              if (state is ExpenseLoaded) {
-                                final cardLimit = cardLimits[cardName];
-                                final cardBoundary = cardBoundaries[cardName];
-                                final cardDueDateVal = cardDueDates[cardName];
+                      Builder(
+                        builder: (context) {
+                          final cardLimit = cardLimits[cardName];
+                          final cardBoundary = cardBoundaries[cardName];
+                          final cardDueDateVal = cardDueDates[cardName];
 
-                                final filteredForMonth = state.data.expenses
-                                    .where((expense) {
-                                      if (isDueDateFiltered &&
-                                          cardDueDateVal != null) {
-                                        final endDate = DateTime(
-                                          DateTime.now().year,
-                                          selectedMonth + 1,
-                                          cardDueDateVal.day,
-                                        );
-                                        final startDate = DateTime(
-                                          endDate.year,
-                                          endDate.month - 1,
-                                          endDate.day,
-                                        );
-                                        bool withinRange =
-                                            (expense.date.isAfter(startDate) ||
-                                                expense.date.isAtSameMomentAs(
-                                                  startDate,
-                                                )) &&
-                                            (expense.date.isBefore(endDate) ||
-                                                expense.date.isAtSameMomentAs(
-                                                  endDate,
-                                                ));
-                                        bool matchesBank =
-                                            cardName.isEmpty ||
-                                            expense.bank.toUpperCase().contains(
-                                              cardName.toUpperCase(),
-                                            ) ||
-                                            cardName.toUpperCase().contains(
-                                              expense.bank.toUpperCase(),
-                                            );
-                                        bool isSpending =
-                                            (expense.type == 'spent' ||
-                                                expense.type == 'debited') &&
-                                            _getGroupForExpense(expense) !=
-                                                'Unread';
-                                        return withinRange &&
-                                            matchesBank &&
-                                            isSpending;
-                                      }
-                                      bool matchesMonth =
-                                          expense.date.month ==
-                                              (selectedMonth + 1) &&
-                                          expense.date.year ==
-                                              DateTime.now().year;
-                                      bool matchesBank =
-                                          cardName.isEmpty ||
-                                          expense.bank.toUpperCase().contains(
-                                            cardName.toUpperCase(),
-                                          ) ||
-                                          cardName.toUpperCase().contains(
-                                            expense.bank.toUpperCase(),
-                                          );
-                                      bool isSpending =
-                                          (expense.type == 'spent' ||
-                                              expense.type == 'debited') &&
-                                          _getGroupForExpense(expense) !=
-                                              'Unread';
-                                      return matchesMonth &&
-                                          matchesBank &&
-                                          isSpending;
-                                    })
-                                    .toList();
-
-                                final currentTotal = filteredForMonth.fold(
-                                  0.0,
-                                  (sum, item) => sum + item.amount,
-                                );
-
-                                final isBudgetEnabled =
-                                    cardBudgetEnabled[cardName] ?? true;
-                                if (isBudgetEnabled &&
-                                    cardBoundary != null &&
-                                    cardBoundary > 0 &&
-                                    currentTotal >= cardBoundary) {
-                                  return WarningBox(
-                                    cardBoundary: cardBoundary,
-                                    currentTotal: currentTotal,
-                                    cardName: cardName,
+                          final filteredForMonth = state.data.expenses
+                              .where((expense) {
+                                if (isDueDateFiltered &&
+                                    cardDueDateVal != null) {
+                                  final endDate = DateTime(
+                                    DateTime.now().year,
+                                    selectedMonth + 1,
+                                    cardDueDateVal.day,
                                   );
+                                  final startDate = DateTime(
+                                    endDate.year,
+                                    endDate.month - 1,
+                                    endDate.day,
+                                  );
+                                  bool withinRange =
+                                      (expense.date.isAfter(startDate) ||
+                                          expense.date.isAtSameMomentAs(
+                                            startDate,
+                                          )) &&
+                                      (expense.date.isBefore(endDate) ||
+                                          expense.date.isAtSameMomentAs(
+                                            endDate,
+                                          ));
+                                  bool matchesBank =
+                                      cardName.isEmpty ||
+                                      expense.bank.toUpperCase().contains(
+                                        cardName.toUpperCase(),
+                                      ) ||
+                                      cardName.toUpperCase().contains(
+                                        expense.bank.toUpperCase(),
+                                      );
+                                  bool isSpending =
+                                      (expense.type == 'spent' ||
+                                          expense.type == 'debited') &&
+                                      _getGroupForExpense(expense) !=
+                                          'Unread';
+                                  return withinRange &&
+                                      matchesBank &&
+                                      isSpending;
                                 }
-                              }
-                              return const SizedBox.shrink();
-                            },
-                          ),
-                        ),
+                                bool matchesMonth =
+                                    expense.date.month ==
+                                        (selectedMonth + 1) &&
+                                    expense.date.year ==
+                                        DateTime.now().year;
+                                bool matchesBank =
+                                    cardName.isEmpty ||
+                                    expense.bank.toUpperCase().contains(
+                                      cardName.toUpperCase(),
+                                    ) ||
+                                    cardName.toUpperCase().contains(
+                                      expense.bank.toUpperCase(),
+                                    );
+                                bool isSpending =
+                                    (expense.type == 'spent' ||
+                                        expense.type == 'debited') &&
+                                    _getGroupForExpense(expense) !=
+                                        'Unread';
+                                return matchesMonth &&
+                                    matchesBank &&
+                                    isSpending;
+                              })
+                              .toList();
+
+                          final currentTotal = filteredForMonth.fold(
+                            0.0,
+                            (sum, item) => sum + item.amount,
+                          );
+
+                          final isBudgetEnabled =
+                              cardBudgetEnabled[cardName] ?? true;
+                          if (isBudgetEnabled &&
+                              cardBoundary != null &&
+                              cardBoundary > 0 &&
+                              currentTotal >= cardBoundary) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 15,
+                                vertical: 5,
+                              ),
+                              child: WarningBox(
+                                cardBoundary: cardBoundary,
+                                currentTotal: currentTotal,
+                                cardName: cardName,
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
                       ),
                     // Restore Chart
                     Padding(
@@ -5005,8 +4981,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          BlocBuilder<ExpenseBloc, ExpenseState>(
-                            builder: (context, state) {
+                          Builder(
+                            builder: (context) {
                               final cardLimit = cardLimits[cardName];
                               final cardBoundary = cardBoundaries[cardName];
                               final cardDueDateVal = cardDueDates[cardName];
@@ -5425,8 +5401,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     // Restore Expense List
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 15),
-                      child: BlocBuilder<ExpenseBloc, ExpenseState>(
-                        builder: (context, state) {
+                      child: Builder(
+                        builder: (context) {
                           if (state is ExpenseLoading) {
                             return const Center(
                               child: CircularProgressIndicator(),
@@ -5973,13 +5949,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                               // Add More Chip (Rule Addition)
                                               InkWell(
                                                 onTap: () =>
-                                                    _openDrawer(1, cardName),
+                                                    _openDrawer(0, cardName),
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 child: Container(
                                                   padding:
                                                       const EdgeInsets.symmetric(
-                                                        horizontal: 20,
+                                                        horizontal: 15,
                                                         vertical: 6.5,
                                                       ),
                                                   decoration: BoxDecoration(
@@ -6605,8 +6581,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
         );
-      },
-    );
   }
 
   void _showConfigureCardAlertDialog(BuildContext context) {
@@ -6737,6 +6711,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         } else {
           addAlertDialog(
             context: context,
+            ref: ref,
             visibleBanks: visibleCards,
             initialBank: cardName,
             groupColors: groupColors,
@@ -6925,6 +6900,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     transactionGroups[exp.id] ?? categoryGroups[normalizedName];
                 addAlertDialog(
                   context: context,
+                  ref: ref,
                   visibleBanks: visibleCards,
                   initialBank: exp.bank,
                   groupColors: groupColors,
@@ -6958,7 +6934,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       deleteButtonText: 'Delete',
     );
     if (confirm == true && context.mounted) {
-      context.read<ExpenseBloc>().add(DeleteExpenseEvent(id));
+      ref.read(expenseNotifierProvider.notifier).deleteExpense(id);
     }
   }
 
@@ -6987,7 +6963,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     StateSetter setDrawerState,
   ) {
     final normMerchant = merchantName.trim().toUpperCase();
-    final state = context.read<ExpenseBloc>().state;
+    final state = ref.read(expenseNotifierProvider);
     if (state is ExpenseLoaded) {
       final toDelete = state.data.expenses.where((e) {
         final dispName = e.name
@@ -6999,7 +6975,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }).toList();
 
       for (final exp in toDelete) {
-        context.read<ExpenseBloc>().add(DeleteExpenseEvent(exp.id));
+        ref.read(expenseNotifierProvider.notifier).deleteExpense(exp.id);
       }
     }
 
@@ -7633,7 +7609,7 @@ final List<String> months = [
   'DEC',
 ];
 
-class CreditCardStack extends StatefulWidget {
+class CreditCardStack extends ConsumerStatefulWidget {
   final List<BankSmsGroup> bankGroups;
   final int selectedMonth;
   final Map<String, double> cardLimits;
@@ -7682,10 +7658,10 @@ class CreditCardStack extends StatefulWidget {
   });
 
   @override
-  State<CreditCardStack> createState() => _CreditCardStackState();
+  ConsumerState<CreditCardStack> createState() => _CreditCardStackState();
 }
 
-class _CreditCardStackState extends State<CreditCardStack> {
+class _CreditCardStackState extends ConsumerState<CreditCardStack> {
   late PageController _pageController;
   int _currentIndex = 0;
 
@@ -8018,9 +7994,8 @@ class _CreditCardStackState extends State<CreditCardStack> {
         },
         itemBuilder: (context, index) {
           final group = widget.bankGroups[index];
-          return BlocBuilder<ExpenseBloc, ExpenseState>(
-            builder: (context, state) {
-              double bankDebitedTotal = 0.0;
+          final state = ref.watch(expenseNotifierProvider);
+          double bankDebitedTotal = 0.0;
               double bankCreditedTotal = 0.0;
               final cardDueDateVal = widget.cardDueDates[group.label];
 
@@ -8103,10 +8078,8 @@ class _CreditCardStackState extends State<CreditCardStack> {
                 ),
               );
             },
-          );
-        },
-      ),
-    );
+          ),
+        );
   }
 
   void _showReorderSheet(BuildContext context) {
