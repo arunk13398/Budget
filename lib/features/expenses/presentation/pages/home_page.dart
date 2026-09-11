@@ -96,6 +96,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   List<BankSmsGroup> _bankGroups = [];
   Map<String, String> cardThemes = {};
   Map<String, String> manualCards = {}; // cardName -> msgId
+  Set<String> deletedCards = {};
 
   // Temporary Drawer State
   List<String>? _tempVisibleCards;
@@ -119,6 +120,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   final Map<String, double> _lastNotifiedSpending = {};
   final Map<String, double> _lastNotifiedBoundarySpending = {};
   final Map<String, double> _lastNotifiedMaxSpending = {};
+
+  bool _isCardDeleted(String? name) {
+    if (name == null || name.trim().isEmpty) return false;
+    final target = name.trim().toUpperCase();
+    final normTarget = normalizeBankName(name).trim().toUpperCase();
+
+    for (final dc in deletedCards) {
+      final cleanDc = dc.trim().toUpperCase();
+      final normDc = normalizeBankName(dc).trim().toUpperCase();
+      if (cleanDc == target ||
+          normDc == target ||
+          cleanDc == normTarget ||
+          normDc == normTarget) {
+        return true;
+      }
+      if (target.length >= 3 && cleanDc.length >= 3) {
+        if (target.contains(cleanDc) || cleanDc.contains(target)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   String getCardTheme(String bankName) {
     final queryName = bankName.isNotEmpty ? bankName : cardName;
@@ -301,6 +325,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     final savedCardName = prefs.getString('cardName') ?? '';
     final savedVisibleCards = prefs.getStringList('visibleCards') ?? [];
+    final savedDeletedCards = prefs.getStringList('deletedCards') ?? [];
     final cgJsonEncrypted = prefs.getString('categoryGroups');
     final gcJsonEncrypted = prefs.getString('groupColors');
     final tgJsonEncrypted = prefs.getString('transactionGroups');
@@ -365,8 +390,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     if (!mounted) return;
 
     setState(() {
+      deletedCards = savedDeletedCards.toSet();
       cardName = savedCardName;
-      visibleCards = savedVisibleCards;
+      visibleCards = savedVisibleCards
+          .where((card) => !_isCardDeleted(card))
+          .toList();
       cardLimits = newCardLimits;
       cardBoundaries = newCardBoundaries;
       cardBudgetEnabled = newCardBudgetEnabled;
@@ -408,6 +436,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('cardName', cardName);
     await prefs.setStringList('visibleCards', visibleCards);
+    await prefs.setStringList('deletedCards', deletedCards.toList());
 
     for (final entry in cardLimits.entries) {
       await prefs.setDouble('limit_${entry.key}', entry.value);
@@ -424,9 +453,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     }
     final allKeys = prefs.getKeys();
     for (final key in allKeys) {
-      if (key.startsWith('dueDate_')) {
+      if (key.startsWith('limit_')) {
+        final card = key.replaceFirst('limit_', '');
+        if (_isCardDeleted(card) || !cardLimits.containsKey(card)) {
+          await prefs.remove(key);
+        }
+      } else if (key.startsWith('boundary_')) {
+        final card = key.replaceFirst('boundary_', '');
+        if (_isCardDeleted(card) || !cardBoundaries.containsKey(card)) {
+          await prefs.remove(key);
+        }
+      } else if (key.startsWith('budgetEnabled_')) {
+        final card = key.replaceFirst('budgetEnabled_', '');
+        if (_isCardDeleted(card) || !cardBudgetEnabled.containsKey(card)) {
+          await prefs.remove(key);
+        }
+      } else if (key.startsWith('dueDate_')) {
         final card = key.replaceFirst('dueDate_', '');
-        if (!cardDueDates.containsKey(card)) {
+        if (_isCardDeleted(card) || !cardDueDates.containsKey(card)) {
+          await prefs.remove(key);
+        }
+      } else if (key.startsWith('isCreditCard_')) {
+        final card = key.replaceFirst('isCreditCard_', '');
+        if (_isCardDeleted(card) || !isCreditCardOverrides.containsKey(card)) {
+          await prefs.remove(key);
+        }
+      } else if (key.startsWith('hideCreditData_')) {
+        final card = key.replaceFirst('hideCreditData_', '');
+        if (_isCardDeleted(card) || !hideCreditDataOverrides.containsKey(card)) {
+          await prefs.remove(key);
+        }
+      } else if (key.startsWith('theme_')) {
+        final card = key.replaceFirst('theme_', '');
+        if (_isCardDeleted(card) || !cardThemes.containsKey(card)) {
+          await prefs.remove(key);
+        }
+      } else if (key.startsWith('includeInTotalBudget_')) {
+        final card = key.replaceFirst('includeInTotalBudget_', '');
+        if (_isCardDeleted(card) || !includeInTotalBudget.containsKey(card)) {
           await prefs.remove(key);
         }
       }
@@ -886,7 +950,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               entries: e.value,
             );
           })
-          .where((g) => isValidBankCardName(g.label))
+          .where((g) => isValidBankCardName(g.label) && !_isCardDeleted(g.label))
           .toList();
     } catch (e) {
       debugPrint('Error loading bank groups from notification expenses: $e');
@@ -899,21 +963,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       // Clean visibleCards to remove any non-bank cards (like person names or raw titles)
       visibleCards = visibleCards
           .map((c) => normalizeBankName(c))
-          .where((c) => isValidBankCardName(c))
+          .where((c) => isValidBankCardName(c) && !_isCardDeleted(c))
           .toSet()
           .toList();
 
       if (_tempVisibleCards != null) {
         _tempVisibleCards = _tempVisibleCards!
             .map((c) => normalizeBankName(c))
-            .where((c) => isValidBankCardName(c))
+            .where((c) => isValidBankCardName(c) && !_isCardDeleted(c))
             .toSet()
             .toList();
       }
 
       // Auto-add newly discovered clean bank card IDs/names into visibleCards filters and auto-save
       for (final g in groups) {
-        if (!visibleCards.contains(g.label)) {
+        if (!visibleCards.contains(g.label) && !_isCardDeleted(g.label)) {
           visibleCards.add(g.label);
           shouldSave = true;
         }
@@ -1007,7 +1071,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               ),
             )
           else
-            ..._bankGroups.map((group) {
+            ..._bankGroups
+                .where((g) => !_isCardDeleted(g.label))
+                .map((group) {
               final isSelected = _tempVisibleCards!.contains(group.label);
 
               IconData bankIcon = Icons.account_balance_wallet_outlined;
@@ -1271,27 +1337,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                           ),
                         );
                         if (confirm == true) {
+                          final cardToDelete = group.label;
+                          final normCardToDelete = normalizeBankName(cardToDelete);
+
+                          // Add to deletedCards set so auto-discovery won't re-add it
+                          deletedCards.add(cardToDelete);
+                          deletedCards.add(normCardToDelete);
+                          deletedCards.add(cardToDelete.toUpperCase());
+                          deletedCards.add(normCardToDelete.toUpperCase());
+
+                          // Delete all expenses belonging to this card from Hive and Riverpod state
+                          final state = ref.read(expenseNotifierProvider);
+                          if (state is ExpenseLoaded) {
+                            final toDelete = state.data.expenses.where((e) {
+                              final bName = normalizeBankName(e.bank, body: e.name);
+                              return _isCardDeleted(e.bank) ||
+                                  _isCardDeleted(bName) ||
+                                  bName.toUpperCase() == cardToDelete.toUpperCase() ||
+                                  bName.toUpperCase() == normCardToDelete.toUpperCase() ||
+                                  e.bank.toUpperCase() == cardToDelete.toUpperCase() ||
+                                  e.bank.toUpperCase() == normCardToDelete.toUpperCase() ||
+                                  (e.bank.isNotEmpty &&
+                                      (e.bank.toUpperCase().contains(cardToDelete.toUpperCase()) ||
+                                          cardToDelete.toUpperCase().contains(e.bank.toUpperCase())));
+                            }).toList();
+
+                            for (final exp in toDelete) {
+                              ref.read(expenseNotifierProvider.notifier).deleteExpense(exp.id);
+                            }
+                          }
+
                           setState(() {
-                            manualCards.remove(group.label);
-                            _bankGroups.removeWhere(
-                              (g) => g.label == group.label,
-                            );
-                            visibleCards.remove(group.label);
-                            _tempVisibleCards?.remove(group.label);
-                            cardLimits.remove(group.label);
-                            _tempCardLimits?.remove(group.label);
-                            cardBoundaries.remove(group.label);
-                            _tempCardBoundaries?.remove(group.label);
-                            cardThemes.remove(group.label);
-                            _tempCardThemes?.remove(group.label);
-                            if (_tempEditingCardName == group.label) {
+                            manualCards.removeWhere((k, v) => _isCardDeleted(k));
+
+                            _bankGroups.removeWhere((g) => _isCardDeleted(g.label));
+
+                            visibleCards.removeWhere((c) => _isCardDeleted(c));
+
+                            _tempVisibleCards?.removeWhere((c) => _isCardDeleted(c));
+
+                            cardLimits.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempCardLimits?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            cardBoundaries.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempCardBoundaries?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            cardBudgetEnabled.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempCardBudgetEnabled?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            isCreditCardOverrides.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempIsCreditCardOverrides?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            hideCreditDataOverrides.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempHideCreditData?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            cardDueDates.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempCardDueDates?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            includeInTotalBudget.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempIncludeInTotalBudget?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            cardThemes.removeWhere((k, v) => _isCardDeleted(k));
+                            _tempCardThemes?.removeWhere((k, v) => _isCardDeleted(k));
+
+                            if (_isCardDeleted(cardName)) {
+                              cardName = visibleCards.isNotEmpty ? visibleCards.first : '';
+                            }
+
+                            if (_tempEditingCardName != null && _isCardDeleted(_tempEditingCardName!)) {
                               _tempEditingCardName =
-                                  _tempVisibleCards != null &&
-                                      _tempVisibleCards!.isNotEmpty
-                                  ? _tempVisibleCards!.first
-                                  : null;
+                                  _tempVisibleCards != null && _tempVisibleCards!.isNotEmpty
+                                      ? _tempVisibleCards!.first
+                                      : null;
                             }
                           });
+
                           setDrawerState(() {});
                           await _saveSettings();
                         }
@@ -1640,6 +1760,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                     ),
                                   );
                                 }
+
+                                deletedCards.removeWhere((dc) =>
+                                    dc.toUpperCase() == newCardName.toUpperCase() ||
+                                    dc.toUpperCase() == normalizeBankName(newCardName).toUpperCase() ||
+                                    newCardName.toUpperCase().contains(dc.toUpperCase()) ||
+                                    dc.toUpperCase().contains(newCardName.toUpperCase()));
 
                                 if (!visibleCards.contains(newCardName)) {
                                   visibleCards.add(newCardName);
@@ -2989,28 +3115,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
+                        horizontal: 12,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFEF2F2), Color(0xFFFFF1F1)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFFFECACA),
+                          width: 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.red,
-                            size: 14,
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEE2E2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Color(0xFFDC2626),
+                              size: 16,
+                            ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              'Allocated ₹${totalGroupLimits.toStringAsFixed(0)} exceeds ₹${totalCardLimit.toStringAsFixed(0)} total budget',
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                            child: RichText(
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  color: Color(0xFF991B1B),
+                                  fontSize: 11.5,
+                                  height: 1.35,
+                                ),
+                                children: [
+                                  const TextSpan(
+                                    text: 'Allocated ',
+                                    style: TextStyle(fontWeight: FontWeight.w500),
+                                  ),
+                                  TextSpan(
+                                    text: '₹${totalGroupLimits.toStringAsFixed(0)}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const TextSpan(
+                                    text: ' exceeds total budget of ',
+                                    style: TextStyle(fontWeight: FontWeight.w500),
+                                  ),
+                                  TextSpan(
+                                    text: '₹${totalCardLimit.toStringAsFixed(0)}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -6109,10 +6276,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                                         vertical: 10,
                                                       ),
                                                       decoration: BoxDecoration(
-                                                        // color: _transactionTabIndex == 0
-                                                        //     ? cardThemeColor
-                                                        //         .withValues(alpha: 0.05)
-                                                        //     : const Color(0xFFF8FAFC),
                                                         borderRadius: BorderRadius.circular(
                                                           14,
                                                         ),
@@ -7684,6 +7847,12 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
     return 'Ocean';
   }
 
+  List<Color> _getCardThemeGradient(String label) {
+    final themeName = _getCardTheme(label);
+    return AppConstants.themeGradients[themeName] ??
+        AppConstants.themeGradients['Ocean']!;
+  }
+
   String? _getGroup(Expense e) {
     if (widget.transactionGroups.containsKey(e.id)) {
       return widget.transactionGroups[e.id];
@@ -8162,6 +8331,15 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
                           ],
                         ),
                       ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Color(0xFF64748B),
+                          size: 22,
+                        ),
+                        tooltip: 'Close',
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -8176,20 +8354,11 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
                           animation: animation,
                           builder: (context, child) {
                             return Material(
-                              color: Colors.white,
-                              elevation: 10,
-                              shadowColor: const Color(0x330F172A),
-                              borderRadius: BorderRadius.circular(14),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: const Color(0xFF2563EB),
-                                    width: 1.8,
-                                  ),
-                                ),
-                                child: child,
-                              ),
+                              color: Colors.transparent,
+                              elevation: 6,
+                              shadowColor: Colors.black.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(16),
+                              child: child,
                             );
                           },
                           child: child,
@@ -8207,108 +8376,83 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
                       itemBuilder: (context, index) {
                         final name = currentOrder[index];
                         final priorityNum = index + 1;
+                        final themeGradient = _getCardThemeGradient(name);
+                        final themeColor = themeGradient.first;
 
                         return Container(
                           key: ValueKey(name),
                           margin: const EdgeInsets.symmetric(vertical: 5),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: const Color(0xFFE2E8F0),
-                              width: 1,
+                              width: 1.2,
                             ),
                           ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
                               horizontal: 14,
-                              vertical: 3,
+                              vertical: 12,
                             ),
-                            leading: Row(
-                              mainAxisSize: MainAxisSize.min,
+                            child: Row(
                               children: [
                                 const Icon(
                                   Icons.drag_indicator_rounded,
-                                  color: Color(0xFF94A3B8),
+                                  color: Colors.grey,
                                   size: 22,
                                 ),
                                 const SizedBox(width: 10),
                                 Container(
-                                  width: 26,
-                                  height: 26,
+                                  width: 28,
+                                  height: 28,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: index == 0
-                                        ? const Color(0xFF8F8F8F)
-                                        : const Color(0xFFE2E8F0),
+                                    color: Colors.grey.shade200,
                                     shape: BoxShape.circle,
                                   ),
                                   child: Text(
                                     '$priorityNum',
-                                    style: TextStyle(
+                                    style:  TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: index == 0
-                                          ? Colors.white
-                                          : const Color(0xFF475569),
+                                      fontSize: 13,
+                                      color: themeColor,
                                     ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14.5,
+                                      color: Color(0xFF0F172A),
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: themeColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: themeColor.withValues(alpha: 0.2),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.credit_card_rounded,
+                                    color: themeColor,
+                                    size: 18,
                                   ),
                                 ),
                               ],
                             ),
-                            title: Text(
-                              name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                            trailing: Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.credit_card_rounded,
-                                color: Color(0xFF3B82F6),
-                                size: 18,
-                              ),
-                            ),
                           ),
                         );
                       },
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Done Action Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: const Text(
-                        'Done',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -8507,33 +8651,41 @@ class CardWidgetUI extends StatelessWidget {
                         ),
                       ],
                     ),
-                    GestureDetector(
-                      onTap: onSettingsTap,
-                      child: Row(
-                        children: [
-                          Text(
-                            'Plan B',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          onSettingsTap();
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        splashColor: Colors.white.withValues(alpha: 0.2),
+                        highlightColor: Colors.white.withValues(alpha: 0.1),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
                           ),
-                          SizedBox(
-                            width: 26,
-                            child: IconButton(
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.all(0),
-                              icon: const Icon(
-                                Icons.settings_outlined,
-                                color: Colors.white,
-                                size: 20,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Text(
+                                'Plan B',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                              onPressed: onSettingsTap,
-                              tooltip: 'Card Settings',
-                            ),
+                              SizedBox(width: 5),
+                              Icon(
+                                Icons.settings_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ],

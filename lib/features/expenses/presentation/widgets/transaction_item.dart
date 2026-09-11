@@ -276,8 +276,8 @@ class TransactionItem extends StatelessWidget {
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: isCredit
-                      ? gradient.colors.first
-                      : isDueDateFiltered ? Colors.red : gradient.colors.last,
+                      ? gradient.colors.last
+                      : isDueDateFiltered ? Colors.red : gradient.colors.first,
                 ),
               ),
             ),
@@ -304,8 +304,8 @@ class TransactionItem extends StatelessWidget {
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           color: isOpen
-                              ? gradient.colors.first.withValues(alpha: 0.18)
-                              : gradient.colors.first.withValues(alpha: 0.1),
+                              ? gradient.colors.last.withValues(alpha: 0.18)
+                              : gradient.colors.last.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: gradient.colors.first.withValues(alpha: 0.25),

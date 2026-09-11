@@ -12,72 +12,129 @@ class WarningBox extends StatelessWidget {
     required this.cardName,
   });
 
+  String _formatAmount(double amount) {
+    final int val = amount.round();
+    final String str = val.abs().toString();
+    if (str.length <= 3) return '${amount < 0 ? '-' : ''}₹$str';
+
+    final String lastThree = str.substring(str.length - 3);
+    final String otherNumbers = str.substring(0, str.length - 3);
+
+    final StringBuffer result = StringBuffer();
+    int count = 0;
+    for (int i = otherNumbers.length - 1; i >= 0; i--) {
+      if (count == 2) {
+        result.write(',');
+        count = 0;
+      }
+      result.write(otherNumbers[i]);
+      count++;
+    }
+
+    final String formattedOther = result.toString().split('').reversed.join('');
+    return '${amount < 0 ? '-' : ''}₹$formattedOther,$lastThree';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final excess = currentTotal - cardBoundary;
+    final formattedCurrent = _formatAmount(currentTotal);
+    final formattedBoundary = _formatAmount(cardBoundary);
+    final formattedExcess = _formatAmount(excess);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFFFCD34D),
-          width: 1.0,
+          color: const Color(0xFFFCD34D).withValues(alpha: 0.8),
+          width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFD97706).withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFEF3C7),
+            padding: const EdgeInsets.all(6),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFEF3C7),
               shape: BoxShape.circle,
-              border: Border.all(
-                color: const Color(0xFFFDE68A),
-                width: 0.5,
-              ),
             ),
             child: const Icon(
               Icons.warning_amber_rounded,
               color: Color(0xFFD97706),
-              size: 18,
+              size: 16,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'BOUNDARY REACHED: ₹${cardBoundary.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFB45309),
-                    fontSize: 12,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Builder(
-                  builder: (context) {
-                    final excess = currentTotal - cardBoundary;
-                    return Text(
-                      'Current spending of ₹${currentTotal.toStringAsFixed(0)} has exceeded your set boundary limit for $cardName by ₹${excess.toStringAsFixed(0)}.',
-                      style: const TextStyle(
-                        color: Color(0xFF78350F),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
+                Row(
+                  children: [
+                    const Text(
+                      'Boundary Reached',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFB45309),
+                        fontSize: 12,
                       ),
-                    );
-                  },
+                    ),
+                    if (cardName.isNotEmpty) ...[
+                      Text(
+                        ' • ',
+                        style: TextStyle(
+                          color: Colors.amber.shade800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        cardName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF92400E),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                RichText(
+                  text: TextSpan(
+                    style: const TextStyle(
+                      color: Color(0xFF78350F),
+                      fontSize: 11.5,
+                      height: 1.3,
+                    ),
+                    children: [
+                      const TextSpan(text: 'Spent '),
+                      TextSpan(
+                        text: formattedCurrent,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFB45309),
+                        ),
+                      ),
+                      const TextSpan(text: ' (Limit '),
+                      TextSpan(
+                        text: formattedBoundary,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const TextSpan(text: ', Exceeded by '),
+                      TextSpan(
+                        text: formattedExcess,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFDC2626),
+                        ),
+                      ),
+                      const TextSpan(text: ')'),
+                    ],
+                  ),
                 ),
               ],
             ),
