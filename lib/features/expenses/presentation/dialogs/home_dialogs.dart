@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../providers/expense_provider.dart';
 
 void showDeleteConfirmation(BuildContext context, WidgetRef ref, String id) {
@@ -125,13 +126,13 @@ void showGroupingDialog({
 }) {
   final TextEditingController labelController = TextEditingController();
   final TextEditingController limitController = TextEditingController();
-  int selectedColor = Colors.blue.value;
+  int selectedColor = Colors.blue.toARGB32();
 
   final normalizedFirstName = namesToGroup.isNotEmpty ? namesToGroup[0].trim().toUpperCase() : null;
   if (normalizedFirstName != null && namesToGroup.length == 1 && categoryGroups.containsKey(normalizedFirstName)) {
     final existingGroup = categoryGroups[normalizedFirstName]!;
     labelController.text = existingGroup;
-    selectedColor = groupColors[existingGroup] ?? Colors.blue.value;
+    selectedColor = groupColors[existingGroup] ?? Colors.blue.toARGB32();
     limitController.text = groupLimits[existingGroup]?.toStringAsFixed(0) ?? '';
   }
 
@@ -145,6 +146,9 @@ void showGroupingDialog({
     const Color(0xFFEC4899), // Pink
     const Color(0xFF6366F1), // Indigo
   ];
+
+  bool showCustomPicker =
+      !colors.any((c) => c.toARGB32() == selectedColor);
 
   showDialog(
     context: context,
@@ -364,57 +368,298 @@ void showGroupingDialog({
                       ],
                       const SizedBox(height: 20),
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF2563EB),
-                              shape: BoxShape.circle,
-                            ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF2563EB),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'THEME COLOR',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF475569),
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'THEME COLOR',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF475569),
-                              letterSpacing: 0.8,
-                            ),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: Color(selectedColor),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 1.5,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Color(selectedColor)
+                                                .withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      '#${(selectedColor & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                        color: Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                onTap: () {
+                                  setDialogState(() {
+                                    showCustomPicker = !showCustomPicker;
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: showCustomPicker
+                                        ? const Color(0xFFEFF6FF)
+                                        : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: showCustomPicker
+                                          ? const Color(0xFF3B82F6)
+                                          : const Color(0xFFCBD5E1),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        showCustomPicker
+                                            ? Icons.palette_outlined
+                                            : Icons.colorize_rounded,
+                                        size: 13,
+                                        color: showCustomPicker
+                                            ? const Color(0xFF2563EB)
+                                            : const Color(0xFF475569),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        showCustomPicker
+                                            ? 'Presets'
+                                            : 'Color Picker',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: showCustomPicker
+                                              ? const Color(0xFF2563EB)
+                                              : const Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: 40,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: colors.length,
-                          separatorBuilder: (context, index) => const SizedBox(width: 10),
-                          itemBuilder: (context, index) {
-                            final color = colors[index];
-                            final isSelected = selectedColor == color.value;
-                            return GestureDetector(
-                              onTap: () => setDialogState(() => selectedColor = color.value),
-                              child: Container(
-                                width: 34,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
-                                  border: isSelected ? Border.all(color: const Color(0xFF0F172A), width: 2.5) : null,
-                                  boxShadow: [
-                                    if (isSelected)
-                                      BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2)),
-                                  ],
+                      const SizedBox(height: 12),
+
+                      if (showCustomPicker) ...[
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              const areaHeightPercent = 0.48;
+                              final pickerHeight =
+                                  (constraints.maxWidth * areaHeightPercent) +
+                                      62.0;
+                              return SizedBox(
+                                height: pickerHeight,
+                                child: ClipRect(
+                                  child: OverflowBox(
+                                    alignment: Alignment.topCenter,
+                                    maxHeight: double.infinity,
+                                    child: ColorPicker(
+                                      pickerColor: Color(selectedColor),
+                                      onColorChanged: (newColor) {
+                                        setDialogState(() {
+                                          selectedColor = newColor.toARGB32();
+                                        });
+                                      },
+                                      colorPickerWidth: constraints.maxWidth,
+                                      pickerAreaHeightPercent:
+                                          areaHeightPercent,
+                                      enableAlpha: false,
+                                      displayThumbColor: true,
+                                      paletteType: PaletteType.hsvWithHue,
+                                      labelTypes: const [],
+                                      hexInputBar: false,
+                                      pickerAreaBorderRadius:
+                                          BorderRadius.circular(12),
+                                    ),
+                                  ),
                                 ),
-                                child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
-                      ),
+                      ] else ...[
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            ...colors.map((color) {
+                              final isSelected =
+                                  selectedColor == color.toARGB32();
+                              return GestureDetector(
+                                onTap: () => setDialogState(
+                                    () => selectedColor = color.toARGB32()),
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: const Color(0xFF0F172A),
+                                            width: 2.5)
+                                        : null,
+                                    boxShadow: [
+                                      if (isSelected)
+                                        BoxShadow(
+                                          color: color.withValues(alpha: 0.4),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                    ],
+                                  ),
+                                  child: isSelected
+                                      ? const Icon(Icons.check,
+                                          color: Colors.white, size: 18)
+                                      : null,
+                                ),
+                              );
+                            }),
+                            GestureDetector(
+                              onTap: () {
+                                setDialogState(() {
+                                  showCustomPicker = true;
+                                });
+                              },
+                              child: Tooltip(
+                                message: 'Open Color Picker',
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const SweepGradient(
+                                      colors: [
+                                        Colors.red,
+                                        Colors.amber,
+                                        Colors.green,
+                                        Colors.cyan,
+                                        Colors.blue,
+                                        Colors.purple,
+                                        Colors.red,
+                                      ],
+                                    ),
+                                    border: Border.all(
+                                      color: !colors.any((c) =>
+                                              c.toARGB32() == selectedColor)
+                                          ? const Color(0xFF0F172A)
+                                          : const Color(0xFFCBD5E1),
+                                      width: !colors.any((c) =>
+                                              c.toARGB32() == selectedColor)
+                                          ? 2.5
+                                          : 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: !colors.any((c) =>
+                                                c.toARGB32() ==
+                                                selectedColor)
+                                            ? Color(selectedColor)
+                                            : Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        !colors.any((c) =>
+                                                c.toARGB32() ==
+                                                selectedColor)
+                                            ? Icons.check_rounded
+                                            : Icons.colorize_rounded,
+                                        size: 13,
+                                        color: !colors.any((c) =>
+                                                c.toARGB32() ==
+                                                selectedColor)
+                                            ? Colors.white
+                                            : const Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 24),
                       Row(
                         children: [

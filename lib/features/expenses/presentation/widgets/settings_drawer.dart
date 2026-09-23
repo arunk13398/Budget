@@ -815,11 +815,41 @@ class _SettingsDrawerState extends ConsumerState<SettingsDrawer> {
 
     final merchantTotals = <String, double>{};
     for (var e in cardExpenses) {
-      final name = e.name.trim().toUpperCase();
+      if (isDeclinedOrFailedText(e.name) ||
+          isCardEndingOrDeclinedMerchant(e.name) ||
+          isStatementOrBillText(e.name)) {
+        continue;
+      }
+      final name = canonicalFilterMerchantName(cleanMerchantName(e.name)).trim().toUpperCase();
+      if (name.isEmpty ||
+          isDeclinedOrFailedText(name) ||
+          isCardEndingOrDeclinedMerchant(name) ||
+          isStatementOrBillText(name)) {
+        continue;
+      }
+      final lower = name.toLowerCase();
+      if (lower.startsWith('upi ref') ||
+          lower.contains('upi ref:') ||
+          lower.startsWith('ref no:') ||
+          lower.startsWith('ref:')) {
+        continue;
+      }
       merchantTotals[name] = (merchantTotals[name] ?? 0) + e.amount;
     }
 
-    final sortedMerchants = merchantTotals.entries.toList()
+    final Map<String, MapEntry<String, double>> deduplicatedMap = {};
+    for (final entry in merchantTotals.entries) {
+      final core = entry.key.replaceAll(RegExp(r'\s*\(?UPI\)?', caseSensitive: false), '').trim();
+      if (deduplicatedMap.containsKey(core)) {
+        final existing = deduplicatedMap[core]!;
+        final bestKey = entry.key.contains('(UPI)') ? entry.key : existing.key;
+        deduplicatedMap[core] = MapEntry(bestKey, existing.value + entry.value);
+      } else {
+        deduplicatedMap[core] = entry;
+      }
+    }
+
+    final sortedMerchants = deduplicatedMap.values.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return Column(
@@ -850,14 +880,15 @@ class _SettingsDrawerState extends ConsumerState<SettingsDrawer> {
               final entry = sortedMerchants[index];
               final name = entry.key;
               final amount = entry.value;
-              final isSelected = _tempSelectedExpenseNames.contains(name);
+              final isSelected = matchesExpenseNameFilter(name, _tempSelectedExpenseNames);
               final group = _tempCategoryGroups[name];
 
               return InkWell(
                 onTap: () {
                   setDrawerState(() {
                     if (isSelected) {
-                      _tempSelectedExpenseNames.remove(name);
+                      _tempSelectedExpenseNames.removeWhere((n) =>
+                          n == name || matchesExpenseNameFilter(n, [name]));
                     } else {
                       _tempSelectedExpenseNames.add(name);
                     }
@@ -887,7 +918,8 @@ class _SettingsDrawerState extends ConsumerState<SettingsDrawer> {
                             if (val == true) {
                               _tempSelectedExpenseNames.add(name);
                             } else {
-                              _tempSelectedExpenseNames.remove(name);
+                              _tempSelectedExpenseNames.removeWhere((n) =>
+                                  n == name || matchesExpenseNameFilter(n, [name]));
                             }
                           });
                         },

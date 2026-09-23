@@ -31,6 +31,7 @@ import '../widgets/warning_box.dart';
 import '../../../../core/services/sms_service.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../dialogs/custom_blue_date_picker_dialog.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../domain/repositories/expense_repository.dart';
 import '../../../../injection_container.dart' as di;
 
@@ -110,6 +111,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Map<String, bool>? _tempHideCreditData;
   Map<String, bool>? _tempIncludeInTotalBudget;
   Map<String, String>? _tempCardThemes;
+  List<String>? _cachedUniqueNames;
+  Map<String, List<String>>? _cachedLabelGroups;
+  List<String>? _cachedOtherMerchants;
   final Map<String, TextEditingController> _tempLimitControllers = {};
   final Map<String, TextEditingController> _tempBoundaryControllers = {};
 
@@ -393,7 +397,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       deletedCards = savedDeletedCards.toSet();
       cardName = savedCardName;
       visibleCards = savedVisibleCards
-          .where((card) => !_isCardDeleted(card))
+          .where((card) =>
+              !_isCardDeleted(card) &&
+              isValidBankCardName(card, manualCards: newManualCards))
           .toList();
       cardLimits = newCardLimits;
       cardBoundaries = newCardBoundaries;
@@ -587,7 +593,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isSingle ? 'Auto-Synced Payment' : 'Auto-Synced Transactions',
+                      isSingle ? 'Auto-Synced Payment' : (count != null && count > 0 ? 'Synced Transactions' : 'Sync Complete'),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 13,
@@ -599,7 +605,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     Text(
                       isSingle
                           ? '${expense.name} • ${expense.bank}'
-                          : 'Captured $count payment(s) while app was closed',
+                          : (count != null && count > 0)
+                              ? 'Captured $count payment(s) from SMS & Notifications'
+                              : 'All bank transactions are up to date',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.75),
                         fontSize: 11.5,
@@ -882,14 +890,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     if (_isSyncing) return;
     setState(() => _isSyncing = true);
     try {
-      await di.sl<SmsService>().readAndPrintSms(
+      // 1. Sync any pending background notification cache
+      final notifCount = await di.sl<SmsService>().syncPendingNotificationCache(
+        manualCards: manualCards,
+      );
+
+      // 2. Read and sync SMS messages from phone message folder
+      final smsCount = await di.sl<SmsService>().readAndPrintSms(
         targetMonth: selectedMonth + 1,
         targetYear: DateTime.now().year,
+        manualCards: manualCards,
       );
+
+      final totalCount = notifCount + smsCount;
+
       await _loadBankGroups();
       if (mounted) {
         ref.read(expenseNotifierProvider.notifier).loadExpenses();
+        _scheduleWidgetUpdate();
+        _showCustomSyncToast(count: totalCount > 0 ? totalCount : null);
       }
+    } catch (e) {
+      debugPrint('Error during _syncSms: $e');
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
@@ -901,11 +923,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       final expenseData = await di.sl<ExpenseRepository>().getExpenses().first;
       final allExpenses = expenseData.expenses;
 
-      // Group all saved expenses by bank/card name
+      // Automatically purge any previously stored expenses that are not from valid bank cards,
+      // or that do not have valid financial transaction types (spent / debited / credited),
+      // or that are declined / failed / card-ending noise items
+      final invalidExpenses = allExpenses.where((e) {
+        final bankName = normalizeBankName(e.bank, body: e.name);
+        final isValidCard = isValidBankCardName(bankName, manualCards: manualCards);
+        final hasValidType = e.type == 'spent' || e.type == 'debited' || e.type == 'credited';
+        final isDeclinedOrCardNoise = isCardEndingOrDeclinedMerchant(e.name) ||
+            isDeclinedOrFailedText(e.name) ||
+            isStatementOrBillText(e.name);
+        return !isValidCard || !hasValidType || isDeclinedOrCardNoise;
+      }).toList();
+      if (invalidExpenses.isNotEmpty) {
+        for (final inv in invalidExpenses) {
+          await di.sl<ExpenseRepository>().deleteExpense(inv.id);
+        }
+      }
+
+      // Group valid saved expenses by bank/card name
       final Map<String, List<BankSmsEntry>> groupedByBank = {};
 
       for (final e in allExpenses) {
         final bankName = normalizeBankName(e.bank, body: e.name);
+        if (!isValidBankCardName(bankName, manualCards: manualCards)) continue;
+        if (e.type != 'spent' && e.type != 'debited' && e.type != 'credited') continue;
+        if (isCardEndingOrDeclinedMerchant(e.name) ||
+            isDeclinedOrFailedText(e.name) ||
+            isStatementOrBillText(e.name)) continue;
+
         if (!groupedByBank.containsKey(bankName)) {
           groupedByBank[bankName] = [];
         }
@@ -923,16 +969,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       // Include manual cards if not already present
       for (final entry in manualCards.entries) {
         final normalizedManual = normalizeBankName(entry.key);
-        if (!groupedByBank.containsKey(normalizedManual)) {
-          groupedByBank[normalizedManual] = [];
+        if (isValidBankCardName(normalizedManual, manualCards: manualCards)) {
+          if (!groupedByBank.containsKey(normalizedManual)) {
+            groupedByBank[normalizedManual] = [];
+          }
         }
       }
 
-      // Include all configured active cards from visibleCards if not already present
+      // Include all configured active cards from visibleCards only if valid and they have transactions or are manual cards
       for (final card in visibleCards) {
         final normalizedCard = normalizeBankName(card);
-        if (!groupedByBank.containsKey(normalizedCard)) {
-          groupedByBank[normalizedCard] = [];
+        if (isValidBankCardName(normalizedCard, manualCards: manualCards)) {
+          if (groupedByBank.containsKey(normalizedCard) ||
+              manualCards.containsKey(card) ||
+              manualCards.containsKey(normalizedCard)) {
+            if (!groupedByBank.containsKey(normalizedCard)) {
+              groupedByBank[normalizedCard] = [];
+            }
+          }
         }
       }
 
@@ -950,7 +1004,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               entries: e.value,
             );
           })
-          .where((g) => isValidBankCardName(g.label) && !_isCardDeleted(g.label))
+          .where((g) =>
+              isValidBankCardName(g.label, manualCards: manualCards) &&
+              !_isCardDeleted(g.label) &&
+              (g.entries.isNotEmpty || manualCards.containsKey(g.label)))
           .toList();
     } catch (e) {
       debugPrint('Error loading bank groups from notification expenses: $e');
@@ -960,24 +1017,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     setState(() {
       _bankGroups = groups;
 
-      // Clean visibleCards to remove any non-bank cards (like person names or raw titles)
-      visibleCards = visibleCards
+      // Clean visibleCards to remove any non-bank cards or cards without transactions
+      final validCardLabels = groups.map((g) => g.label).toSet();
+      final cleanVisible = visibleCards
           .map((c) => normalizeBankName(c))
-          .where((c) => isValidBankCardName(c) && !_isCardDeleted(c))
+          .where((c) =>
+              isValidBankCardName(c, manualCards: manualCards) &&
+              !_isCardDeleted(c) &&
+              (validCardLabels.contains(c) || manualCards.containsKey(c)))
           .toSet()
           .toList();
+      if (cleanVisible.length != visibleCards.length) {
+        shouldSave = true;
+      }
+      visibleCards = cleanVisible;
 
       if (_tempVisibleCards != null) {
         _tempVisibleCards = _tempVisibleCards!
             .map((c) => normalizeBankName(c))
-            .where((c) => isValidBankCardName(c) && !_isCardDeleted(c))
+            .where((c) =>
+                isValidBankCardName(c, manualCards: manualCards) &&
+                !_isCardDeleted(c) &&
+                (validCardLabels.contains(c) || manualCards.containsKey(c)))
             .toSet()
             .toList();
       }
 
       // Auto-add newly discovered clean bank card IDs/names into visibleCards filters and auto-save
       for (final g in groups) {
-        if (!visibleCards.contains(g.label) && !_isCardDeleted(g.label)) {
+        if (!visibleCards.contains(g.label) &&
+            !_isCardDeleted(g.label) &&
+            (g.entries.isNotEmpty || manualCards.containsKey(g.label))) {
           visibleCards.add(g.label);
           shouldSave = true;
         }
@@ -1002,6 +1072,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildNotificationPermissionCard(setDrawerState),
+          _buildSmsPermissionCard(setDrawerState),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1850,6 +1921,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     );
   }
 
+
   Widget _buildNotificationPermissionCard(StateSetter setDrawerState) {
     return FutureBuilder<bool>(
       future: di.sl<SmsService>().isNotificationListenerPermissionGranted(),
@@ -1948,6 +2020,121 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   ),
                 ),
               ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSmsPermissionCard(StateSetter setDrawerState) {
+    return FutureBuilder<bool>(
+      future: di.sl<SmsService>().isSmsPermissionGranted(),
+      builder: (context, snapshot) {
+        final isGranted = snapshot.data ?? false;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isGranted ? Colors.teal.shade50 : Colors.indigo.shade50,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isGranted ? Colors.teal.shade200 : Colors.indigo.shade200,
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isGranted
+                          ? Colors.teal.shade100
+                          : Colors.indigo.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isGranted
+                          ? Icons.sms_rounded
+                          : Icons.sms_outlined,
+                      color: isGranted
+                          ? Colors.teal.shade800
+                          : Colors.indigo.shade800,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SMS Messages Sync',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isGranted
+                                ? Colors.teal.shade900
+                                : Colors.indigo.shade900,
+                          ),
+                        ),
+                        Text(
+                          isGranted
+                              ? 'Active: Syncs transactions from phone messages folder'
+                              : 'Grant SMS permission to import & sync bank messages',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isGranted
+                                ? Colors.teal.shade700
+                                : Colors.indigo.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    if (!isGranted) {
+                      final granted = await di.sl<SmsService>().requestSmsPermission();
+                      setDrawerState(() {});
+                      if (granted) {
+                        await _syncSms();
+                      }
+                    } else {
+                      await _syncSms();
+                    }
+                  },
+                  icon: Icon(
+                    isGranted ? Icons.sync_rounded : Icons.mark_email_read_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    isGranted ? 'Sync Messages Now' : 'Grant SMS Permission & Sync',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isGranted
+                        ? Colors.teal.shade800
+                        : Colors.indigo.shade800,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         );
@@ -4163,222 +4350,309 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   Widget _buildTempFilterTab(StateSetter setDrawerState, ExpenseState state) {
     if (state is! ExpenseLoaded) {
-      return Center(child: Text('No categories available'));
+      return const Center(child: Text('No categories available'));
     }
-    final uniqueNames = state.data.expenses
-        .map((e) => e.name.trim().toUpperCase())
-        .toSet()
-        .toList();
 
-    final Map<String, List<String>> labelGroups = {};
-    for (var name in uniqueNames) {
-      if (categoryGroups.containsKey(name)) {
-        final label = categoryGroups[name]!;
-        labelGroups.putIfAbsent(label, () => []).add(name);
+    if (_cachedUniqueNames == null) {
+      bool isUpiRef(String name) {
+        final lower = name.toLowerCase().trim();
+        return lower.startsWith('upi ref') ||
+            lower.contains('upi ref:') ||
+            lower.startsWith('ref no:') ||
+            lower.startsWith('ref:') ||
+            RegExp(r'\bupi\s*ref\b', caseSensitive: false).hasMatch(lower);
       }
+
+      final rawCleanedNames = state.data.expenses
+          .where((e) =>
+              !isDeclinedOrFailedText(e.name) &&
+              !isCardEndingOrDeclinedMerchant(e.name) &&
+              !isStatementOrBillText(e.name))
+          .map((e) => canonicalFilterMerchantName(cleanMerchantName(e.name)).trim().toUpperCase())
+          .where((name) =>
+              name.isNotEmpty &&
+              !isUpiRef(name) &&
+              !isDeclinedOrFailedText(name) &&
+              !isCardEndingOrDeclinedMerchant(name) &&
+              !isStatementOrBillText(name))
+          .toSet();
+
+      // Deduplicate core names so items like "adhnan.e-2", "adhnan.e-3" combine into "adhnan.e"
+      // and duplicate entries between name and name (UPI) are combined into a single chip.
+      final Map<String, String> deduplicatedMap = {};
+      for (final name in rawCleanedNames) {
+        final core = name.replaceAll(RegExp(r'\s*\(?UPI\)?', caseSensitive: false), '').trim();
+        if (deduplicatedMap.containsKey(core)) {
+          if (name.contains('(UPI)')) {
+            deduplicatedMap[core] = name;
+          }
+        } else {
+          deduplicatedMap[core] = name;
+        }
+      }
+
+      _cachedUniqueNames = deduplicatedMap.values.toList()..sort();
+
+      final Map<String, List<String>> groups = {};
+      for (final name in _cachedUniqueNames!) {
+        if (categoryGroups.containsKey(name)) {
+          final label = categoryGroups[name]!;
+          groups.putIfAbsent(label, () => []).add(name);
+        }
+      }
+      _cachedLabelGroups = groups;
+      _cachedOtherMerchants = _cachedUniqueNames!
+          .where((name) => !categoryGroups.containsKey(name))
+          .toList();
     }
 
-    final otherMerchants = uniqueNames
-        .where((name) => !categoryGroups.containsKey(name))
-        .toList();
+    final labelGroups = _cachedLabelGroups ?? {};
+    final otherMerchants = _cachedOtherMerchants ?? [];
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return StatefulBuilder(
+      builder: (context, setFilterState) {
+        final selectedSet = _tempSelectedExpenseNames != null
+            ? _tempSelectedExpenseNames!.toSet()
+            : <String>{};
+        final hasUngroupedSelected = selectedSet.any(
+          (name) => !categoryGroups.containsKey(name),
+        );
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Filter by Group',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              IconButton(
-                onPressed: () => _showGroupingDialog(
-                  context,
-                  targetNames: _tempSelectedExpenseNames,
-                ),
-                icon: Container(
-                  padding: EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.add, color: Colors.white, size: 18),
-                ),
-                tooltip: 'Create New Group',
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Select specific categories to isolate expenses',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
-          ),
-          SizedBox(height: 24),
-
-          if (labelGroups.isNotEmpty) ...[
-            ...labelGroups.entries.map((entry) {
-              final label = entry.key;
-              final merchants = entry.value;
-              final isSelected = _tempSelectedExpenseNames!.contains(label);
-              final color = Color(groupColors[label] ?? Colors.black.value);
-
-              return GestureDetector(
-                onTap: () {
-                  setDrawerState(() {
-                    if (isSelected) {
-                      _tempSelectedExpenseNames!.remove(label);
-                    } else {
-                      _tempSelectedExpenseNames!.add(label);
-                    }
-                  });
-                },
-                child: AnimatedContainer(
-                  duration: Duration(milliseconds: 200),
-                  margin: EdgeInsets.only(bottom: 12),
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isSelected ? color.withOpacity(0.08) : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isSelected
-                          ? color.withOpacity(0.3)
-                          : Colors.grey.shade200,
-                      width: 1.5,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Filter by Group',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
+                  IconButton(
+                    onPressed: () {
+                      _showGroupingDialog(
+                        context,
+                        targetNames: _tempSelectedExpenseNames,
+                      );
+                      _cachedUniqueNames = null;
+                      setFilterState(() {});
+                      setDrawerState(() {});
+                    },
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.add, color: Colors.white, size: 18),
+                    ),
+                    tooltip: 'Create New Group',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Select specific categories to isolate expenses',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+              const SizedBox(height: 24),
+
+              if (labelGroups.isNotEmpty) ...[
+                ...labelGroups.entries.map((entry) {
+                  final label = entry.key;
+                  final merchants = entry.value;
+                  final isSelected = selectedSet.contains(label);
+                  final color = Color(groupColors[label] ?? Colors.black.value);
+
+                  return GestureDetector(
+                    onTap: () {
+                      setFilterState(() {
+                        if (isSelected) {
+                          _tempSelectedExpenseNames!.remove(label);
+                        } else {
+                          _tempSelectedExpenseNames!.add(label);
+                        }
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isSelected ? color.withValues(alpha: 0.08) : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected
+                              ? color.withValues(alpha: 0.3)
+                              : Colors.grey.shade200,
+                          width: 1.5,
                         ),
                       ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              label,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
                             ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  label,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  '${merchants.length} merchants linked',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            isSelected ? Icons.check_circle : Icons.circle_outlined,
+                            color: isSelected ? color : Colors.grey.shade300,
+                            size: 24,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+
+              if (otherMerchants.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'INDIVIDUAL MERCHANTS',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    if (hasUngroupedSelected)
+                      TextButton.icon(
+                        onPressed: () {
+                          _showGroupingDialog(
+                            context,
+                            targetNames: _tempSelectedExpenseNames,
+                          );
+                          _cachedUniqueNames = null;
+                          setFilterState(() {});
+                          setDrawerState(() {});
+                        },
+                        icon: const Icon(Icons.group_add_outlined, size: 18),
+                        label: const Text(
+                          'Group Selected',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: getThemeColor(cardName),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: otherMerchants.map((name) {
+                    final isSelected = selectedSet.contains(name) ||
+                        matchesExpenseNameFilter(name, _tempSelectedExpenseNames ?? []);
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        setFilterState(() {
+                          if (isSelected) {
+                            _tempSelectedExpenseNames!.removeWhere((n) =>
+                                n == name || matchesExpenseNameFilter(n, [name]));
+                          } else {
+                            _tempSelectedExpenseNames!.add(name);
+                          }
+                        });
+                      },
+                      onLongPress: () {
+                        _confirmDeleteMerchant(context, name, (fn) {
+                          _cachedUniqueNames = null;
+                          setFilterState(fn);
+                          setDrawerState(fn);
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.blue.shade50
+                              : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.blue.withValues(alpha: 0.4)
+                                : Colors.grey.shade300,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isSelected) ...[
+                              const Icon(
+                                Icons.check_rounded,
+                                size: 13,
+                                color: Colors.blue,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             Text(
-                              '${merchants.length} merchants linked',
+                              name.toLowerCase(),
                               style: TextStyle(
+                                color: isSelected
+                                    ? Colors.blue.shade900
+                                    : Colors.black87,
                                 fontSize: 11,
-                                color: Colors.grey.shade600,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Icon(
-                        isSelected ? Icons.check_circle : Icons.circle_outlined,
-                        color: isSelected ? color : Colors.grey.shade300,
-                        size: 24,
-                      ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }),
-          ],
-
-          if (otherMerchants.isNotEmpty) ...[
-            SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'INDIVIDUAL MERCHANTS',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                if (_tempSelectedExpenseNames!.any(
-                  (name) => !categoryGroups.containsKey(name),
-                ))
-                  TextButton.icon(
-                    onPressed: () => _showGroupingDialog(
-                      context,
-                      targetNames: _tempSelectedExpenseNames,
-                    ),
-                    icon: Icon(Icons.group_add_outlined, size: 18),
-                    label: Text(
-                      'Group Selected',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: getThemeColor(cardName),
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
               ],
-            ),
-            SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: otherMerchants.map((name) {
-                final isSelected = _tempSelectedExpenseNames!.contains(name);
-                return GestureDetector(
-                  onLongPress: () =>
-                      _confirmDeleteMerchant(context, name, setDrawerState),
-                  child: FilterChip(
-                    label: Text(
-                      name.toLowerCase(),
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.blue.shade900
-                            : Colors.black87,
-                        fontSize: 11,
-                      ),
-                    ),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setDrawerState(() {
-                        if (selected) {
-                          _tempSelectedExpenseNames!.add(name);
-                        } else {
-                          _tempSelectedExpenseNames!.remove(name);
-                        }
-                      });
-                    },
-                    selectedColor: Colors.blue.shade50,
-                    checkmarkColor: Colors.blue,
-                    backgroundColor: Colors.grey.shade50,
-                    side: BorderSide(
-                      color: isSelected
-                          ? Colors.blue.withOpacity(0.3)
-                          : Colors.grey.shade300,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-          SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 100),
-        ],
-      ),
+              SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 100),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -4512,28 +4786,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   void _openDrawer(int tabIndex, [String? targetCard]) {
     HapticFeedback.selectionClick();
-    // Instantly trigger drawer opening animation to prevent any lag or frame drops
-    _scaffoldKey.currentState?.openEndDrawer();
+    _drawerTabIndex = tabIndex;
+    editingCardName = targetCard ?? cardName;
+    // Reset temp state to current actual values
+    _tempVisibleCards = null;
+    _tempSelectedExpenseNames = null;
+    _tempEditingCardName = null;
+    _tempCardLimits = null;
+    _tempCardBoundaries = null;
+    _tempCardDueDates = null;
+    _tempIsCreditCardOverrides = null;
+    _tempHideCreditData = null;
+    _tempCardThemes = null;
+    _cachedUniqueNames = null;
+    _cachedLabelGroups = null;
+    _cachedOtherMerchants = null;
 
-    // Defer state updates to the next microtask so the animation starts immediately without block
-    Future.microtask(() {
-      if (mounted) {
-        setState(() {
-          _drawerTabIndex = tabIndex;
-          editingCardName = targetCard ?? cardName;
-          // Reset temp state to current actual values
-          _tempVisibleCards = null;
-          _tempSelectedExpenseNames = null;
-          _tempEditingCardName = null;
-          _tempCardLimits = null;
-          _tempCardBoundaries = null;
-          _tempCardDueDates = null;
-          _tempIsCreditCardOverrides = null;
-          _tempHideCreditData = null;
-          _tempCardThemes = null;
-        });
-      }
-    });
+    _scaffoldKey.currentState?.openEndDrawer();
   }
 
   void _checkBoundaryAlerts(ExpenseState state) {
@@ -4640,7 +4909,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         final groupLabel = _getGroupForExpense(expense);
         bool matchesName =
             selectedExpenseNames.isEmpty ||
-            selectedExpenseNames.contains(normalizedName) ||
+            matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
             (groupLabel != null &&
                 selectedExpenseNames.contains(groupLabel));
         bool isNotUnread = _getGroupForExpense(expense) != 'Unread';
@@ -4692,33 +4961,138 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                          child: TabBar(
-                            isScrollable: true,
-                            tabAlignment: TabAlignment.start,
-                            dividerColor: Colors.transparent,
-                            labelColor: Colors.black,
-                            unselectedLabelColor: Colors.grey,
-                            indicatorColor: Colors.black,
-                            indicatorWeight: 3,
-                            labelPadding: const EdgeInsets.symmetric(horizontal: 12),
-                            labelStyle: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          padding: const EdgeInsets.all(4),
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFE2E8F0),
+                              width: 0.8,
                             ),
-                            onTap: (index) =>
-                                setState(() => _drawerTabIndex = index),
+                          ),
+                          child: TabBar(
+                            dividerColor: Colors.transparent,
+                            indicatorSize: TabBarIndicatorSize.tab,
+                            indicator: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            labelColor: const Color(0xFF0F172A),
+                            unselectedLabelColor: const Color(0xFF64748B),
+                            labelStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                              letterSpacing: -0.2,
+                            ),
+                            unselectedLabelStyle: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12.5,
+                              letterSpacing: -0.2,
+                            ),
+                            splashFactory: NoSplash.splashFactory,
+                            overlayColor: WidgetStateProperty.all(Colors.transparent),
+                            labelPadding: EdgeInsets.zero,
+                            onTap: (index) {
+                              _drawerTabIndex = index;
+                            },
                             tabs: _tempVisibleCards!.isEmpty
-                                ? [
-                                    const Tab(text: 'Configure'),
-                                    const Tab(text: 'Info'),
+                                ? const [
+                                    Tab(
+                                      height: 40,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.credit_card_rounded, size: 15),
+                                            SizedBox(width: 5),
+                                            Text('Configure'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Tab(
+                                      height: 40,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.info_outline_rounded, size: 15),
+                                            SizedBox(width: 5),
+                                            Text('Info'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ]
-                                : [
-                                    const Tab(text: 'Settings'),
-                                    const Tab(text: 'Filter'),
-                                    const Tab(text: 'Configure'),
-                                    const Tab(text: 'Info'),
+                                : const [
+                                    Tab(
+                                      height: 40,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.tune_rounded, size: 15),
+                                            SizedBox(width: 4),
+                                            Text('Settings'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Tab(
+                                      height: 40,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.filter_list_rounded, size: 15),
+                                            SizedBox(width: 4),
+                                            Text('Filter'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Tab(
+                                      height: 40,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.credit_card_rounded, size: 15),
+                                            SizedBox(width: 4),
+                                            Text('Configure'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Tab(
+                                      height: 40,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.info_outline_rounded, size: 15),
+                                            SizedBox(width: 4),
+                                            Text('Info'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ],
                           ),
                         ),
@@ -4759,6 +5133,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       _tempHideCreditData = null;
                                       _tempIncludeInTotalBudget = null;
                                       _tempCardThemes = null;
+                                      _cachedUniqueNames = null;
+                                      _cachedLabelGroups = null;
+                                      _cachedOtherMerchants = null;
                                     });
                                     Navigator.pop(context);
                                   },
@@ -4826,6 +5203,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       _tempHideCreditData = null;
                                       _tempIncludeInTotalBudget = null;
                                       _tempCardThemes = null;
+                                      _cachedUniqueNames = null;
+                                      _cachedLabelGroups = null;
+                                      _cachedOtherMerchants = null;
                                     });
 
                                     Navigator.pop(context);
@@ -4856,9 +5236,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     ),
                   );
                 },
+                ),
               ),
             ),
-          ),
           body: SafeArea(
             child: SingleChildScrollView(
               child: Column(
@@ -5196,9 +5576,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         );
                                         bool matchesFilter =
                                             selectedExpenseNames.isEmpty ||
-                                            selectedExpenseNames.contains(
-                                              normalizedName,
-                                            ) ||
+                                            matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
                                             (groupLabel != null &&
                                                 selectedExpenseNames.contains(
                                                   groupLabel,
@@ -5244,9 +5622,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       );
                                       bool matchesFilter =
                                           selectedExpenseNames.isEmpty ||
-                                          selectedExpenseNames.contains(
-                                            normalizedName,
-                                          ) ||
+                                          matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
                                           (groupLabel != null &&
                                               selectedExpenseNames.contains(
                                                 groupLabel,
@@ -5288,9 +5664,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       );
                                       bool matchesFilter =
                                           selectedExpenseNames.isEmpty ||
-                                          selectedExpenseNames.contains(
-                                            normalizedName,
-                                          ) ||
+                                          matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
                                           (groupLabel != null &&
                                               selectedExpenseNames.contains(
                                                 groupLabel,
@@ -5607,17 +5981,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         cardName.toUpperCase().contains(
                                           expense.bank.toUpperCase(),
                                         );
-                                    final normalizedName = expense.name
-                                        .trim()
-                                        .toUpperCase();
                                     final groupLabel = _getGroupForExpense(
                                       expense,
                                     );
                                     bool matchesFilter =
                                         selectedExpenseNames.isEmpty ||
-                                        selectedExpenseNames.contains(
-                                          normalizedName,
-                                        ) ||
+                                        matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
                                         (groupLabel != null &&
                                             selectedExpenseNames.contains(
                                               groupLabel,
@@ -5670,17 +6039,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       cardName.toUpperCase().contains(
                                         expense.bank.toUpperCase(),
                                       );
-                                  final normalizedName = expense.name
-                                      .trim()
-                                      .toUpperCase();
                                   final groupLabel = _getGroupForExpense(
                                     expense,
                                   );
                                   bool matchesFilter =
                                       selectedExpenseNames.isEmpty ||
-                                      selectedExpenseNames.contains(
-                                        normalizedName,
-                                      ) ||
+                                      matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
                                       (groupLabel != null &&
                                           selectedExpenseNames.contains(
                                             groupLabel,
@@ -5752,6 +6116,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                                 ),
                                               ),
                                               const Spacer(),
+                                              _buildSyncButton(context),
+                                              SizedBox(width: 5),
                                               GestureDetector(
                                                 onTap: () {
                                                   final cardDueDateVal =
@@ -5770,10 +6136,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                                                         .bold,
                                                               ),
                                                         ),
-                                                        backgroundColor:
-                                                            const Color(
-                                                              0xFFEF4444,
-                                                            ),
+                                                        backgroundColor: const Color(0xFFEF4444),
                                                       ),
                                                     );
                                                   } else {
@@ -6521,6 +6884,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 ),
                               ),
                               const Spacer(),
+                              _buildSyncButton(context),
+                              const SizedBox(width: 8),
                               _buildAddNewButton(context),
                             ],
                           ),
@@ -6935,6 +7300,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     );
   }
 
+  Widget _buildSyncButton(BuildContext context) {
+    final List<Color> gradientColors = getCardThemeGradient(cardName);
+    final primaryColor = gradientColors.first;
+
+    return Tooltip(
+      message: 'Sync SMS & Notifications',
+      child: GestureDetector(
+        onTap: _isSyncing ? null : _syncSms,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6.5),
+          decoration: BoxDecoration(
+            color: _isSyncing
+                ? primaryColor.withValues(alpha: 0.12)
+                : primaryColor.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: _isSyncing
+                  ? primaryColor.withValues(alpha: 0.6)
+                  : primaryColor.withValues(alpha: 0.4),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isSyncing)
+                SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                  ),
+                )
+              else
+                Icon(
+                  Icons.sync_rounded,
+                  size: 15,
+                  color: primaryColor,
+                ),
+              const SizedBox(width: 5),
+              Text(
+                _isSyncing ? 'SYNCING...' : 'SYNC',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                  color: primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFeatureCard({
     required IconData icon,
     required Color iconColor,
@@ -7134,7 +7557,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             .trim();
         return e.name.trim().toUpperCase() == normMerchant ||
             dispName.toUpperCase() == normMerchant ||
-            e.name.toLowerCase() == merchantName.toLowerCase();
+            e.name.toLowerCase() == merchantName.toLowerCase() ||
+            matchesExpenseNameFilter(e.name, [merchantName]);
       }).toList();
 
       for (final exp in toDelete) {
@@ -7168,7 +7592,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     final namesToGroup = targetNames ?? selectedExpenseNames;
     final TextEditingController labelController = TextEditingController();
     final TextEditingController limitController = TextEditingController();
-    int? selectedColor = Colors.blue.value;
+    int selectedColor = Colors.blue.toARGB32();
     bool applyToAll = true;
     String? nameError;
     String? colorError;
@@ -7188,7 +7612,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     if (existingGroup != null) {
       labelController.text = existingGroup;
-      selectedColor = groupColors[existingGroup] ?? Colors.blue.value;
+      selectedColor = groupColors[existingGroup] ?? Colors.blue.toARGB32();
       limitController.text =
           groupLimits[existingGroup]?.toStringAsFixed(0) ?? '';
     }
@@ -7211,6 +7635,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       const Color(0xFF475569), // Slate Gray
       const Color(0xFFE11D48), // Ruby Coral
     ];
+
+    bool showCustomPicker =
+        !colors.any((c) => c.toARGB32() == selectedColor);
 
     showDialog(
       context: context,
@@ -7479,80 +7906,308 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
                       const SizedBox(height: 20),
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'THEME COLOR',
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF94A3B8),
-                              letterSpacing: 1.2,
-                            ),
+                          Row(
+                            children: [
+                              const Text(
+                                'THEME COLOR',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF94A3B8),
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const Text(
+                                ' *',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
-                          const Text(
-                            ' *',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      // 16 Color Palette Horizontal ListView
-                      SizedBox(
-                        height: 42,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: colors.length,
-                          separatorBuilder: (context, index) =>
-                              const SizedBox(width: 10),
-                          itemBuilder: (context, index) {
-                            final color = colors[index];
-                            final isSelected = selectedColor == color.value;
-                            return GestureDetector(
-                              onTap: () {
-                                setDialogState(() {
-                                  selectedColor = color.value;
-                                  colorError = null;
-                                });
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                width: 40,
-                                height: 40,
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: isSelected
-                                        ? const Color(0xFF0F172A)
-                                        : Colors.transparent,
-                                    width: isSelected ? 2.5 : 0,
+                                    color: const Color(0xFFE2E8F0),
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: color.withOpacity(
-                                        isSelected ? 0.45 : 0.2,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: Color(selectedColor),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 1.5,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Color(selectedColor)
+                                                .withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
                                       ),
-                                      blurRadius: isSelected ? 8 : 4,
-                                      offset: const Offset(0, 3),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      '#${(selectedColor & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                        color: Color(0xFF334155),
+                                      ),
                                     ),
                                   ],
                                 ),
-                                child: isSelected
-                                    ? const Icon(
-                                        Icons.check_rounded,
-                                        color: Colors.white,
-                                        size: 20,
-                                      )
-                                    : null,
                               ),
-                            );
-                          },
-                        ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                onTap: () {
+                                  setDialogState(() {
+                                    showCustomPicker = !showCustomPicker;
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: showCustomPicker
+                                        ? const Color(0xFFEFF6FF)
+                                        : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: showCustomPicker
+                                          ? const Color(0xFF3B82F6)
+                                          : const Color(0xFFCBD5E1),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        showCustomPicker
+                                            ? Icons.palette_outlined
+                                            : Icons.colorize_rounded,
+                                        size: 13,
+                                        color: showCustomPicker
+                                            ? const Color(0xFF2563EB)
+                                            : const Color(0xFF475569),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        showCustomPicker
+                                            ? 'Presets'
+                                            : 'Color Picker',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: showCustomPicker
+                                              ? const Color(0xFF2563EB)
+                                              : const Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 12),
+
+                      if (showCustomPicker) ...[
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              const areaHeightPercent = 0.48;
+                              final pickerHeight =
+                                  (constraints.maxWidth * areaHeightPercent) +
+                                      62.0;
+                              return SizedBox(
+                                height: pickerHeight,
+                                child: ClipRect(
+                                  child: OverflowBox(
+                                    alignment: Alignment.topCenter,
+                                    maxHeight: double.infinity,
+                                    child: ColorPicker(
+                                      pickerColor: Color(selectedColor),
+                                      onColorChanged: (newColor) {
+                                        setDialogState(() {
+                                          selectedColor = newColor.toARGB32();
+                                          colorError = null;
+                                        });
+                                      },
+                                      colorPickerWidth: constraints.maxWidth,
+                                      pickerAreaHeightPercent:
+                                          areaHeightPercent,
+                                      enableAlpha: false,
+                                      displayThumbColor: true,
+                                      paletteType: PaletteType.hsvWithHue,
+                                      labelTypes: const [],
+                                      hexInputBar: false,
+                                      pickerAreaBorderRadius:
+                                          BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ] else ...[
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            ...colors.map((color) {
+                              final isSelected =
+                                  selectedColor == color.toARGB32();
+                              return GestureDetector(
+                                onTap: () {
+                                  setDialogState(() {
+                                    selectedColor = color.toARGB32();
+                                    colorError = null;
+                                  });
+                                },
+                                child: AnimatedContainer(
+                                  duration:
+                                      const Duration(milliseconds: 150),
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? const Color(0xFF0F172A)
+                                          : Colors.transparent,
+                                      width: isSelected ? 2.5 : 0,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: color.withValues(
+                                          alpha: isSelected ? 0.45 : 0.2,
+                                        ),
+                                        blurRadius: isSelected ? 8 : 4,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: isSelected
+                                      ? const Icon(
+                                          Icons.check_rounded,
+                                          color: Colors.white,
+                                          size: 18,
+                                        )
+                                      : null,
+                                ),
+                              );
+                            }),
+                            GestureDetector(
+                              onTap: () {
+                                setDialogState(() {
+                                  showCustomPicker = true;
+                                });
+                              },
+                              child: Tooltip(
+                                message: 'Open Color Picker',
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const SweepGradient(
+                                      colors: [
+                                        Colors.red,
+                                        Colors.amber,
+                                        Colors.green,
+                                        Colors.cyan,
+                                        Colors.blue,
+                                        Colors.purple,
+                                        Colors.red,
+                                      ],
+                                    ),
+                                    border: Border.all(
+                                      color: !colors.any((c) =>
+                                              c.toARGB32() == selectedColor)
+                                          ? const Color(0xFF0F172A)
+                                          : const Color(0xFFCBD5E1),
+                                      width: !colors.any((c) =>
+                                              c.toARGB32() == selectedColor)
+                                          ? 2.5
+                                          : 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: !colors.any((c) =>
+                                                c.toARGB32() ==
+                                                selectedColor)
+                                            ? Color(selectedColor)
+                                            : Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        !colors.any((c) =>
+                                                c.toARGB32() ==
+                                                selectedColor)
+                                            ? Icons.check_rounded
+                                            : Icons.colorize_rounded,
+                                        size: 13,
+                                        color: !colors.any((c) =>
+                                                c.toARGB32() ==
+                                                selectedColor)
+                                            ? Colors.white
+                                            : const Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       if (colorError != null) ...[
                         const SizedBox(height: 6),
                         Row(
@@ -7643,17 +8298,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   nameError = label.isEmpty
                                       ? 'Label name is required'
                                       : null;
-                                  colorError = selectedColor == null
-                                      ? 'Theme color is required'
-                                      : null;
                                 });
 
-                                if (label.isEmpty || selectedColor == null) {
+                                if (label.isEmpty) {
                                   return;
                                 }
 
                                 setState(() {
-                                  groupColors[label] = selectedColor!;
+                                  groupColors[label] = selectedColor;
                                   if (limitController.text.isNotEmpty) {
                                     groupLimits[label] =
                                         double.tryParse(limitController.text) ??
@@ -8343,7 +8995,6 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
                     ],
                   ),
                   const SizedBox(height: 16),
-
                   // Reorderable Card List
                   Flexible(
                     child: ReorderableListView.builder(

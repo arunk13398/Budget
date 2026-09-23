@@ -123,7 +123,7 @@ class BankNotificationListenerService : NotificationListenerService() {
                                 if (ts > 0L) msgTimestamp = ts
                             }
 
-                            if (msgText.isNotEmpty()) {
+                            if (msgText.isNotEmpty() && isPaymentAlert(msgSender, msgText)) {
                                 saveToNotificationCacheQueue(msgSender, msgText, packageName, msgTimestamp)
                                 try { processAndSaveBackgroundTransaction(msgSender, msgText, msgTimestamp) } catch (e: Exception) { Log.e(TAG, "Error in processAndSaveBackgroundTransaction", e) }
                                 broadcastNotification(msgSender, msgText, packageName, msgTimestamp)
@@ -141,7 +141,7 @@ class BankNotificationListenerService : NotificationListenerService() {
             if (lines != null && lines.isNotEmpty()) {
                 for (line in lines) {
                     val lineStr = line?.toString() ?: ""
-                    if (lineStr.isNotEmpty()) {
+                    if (lineStr.isNotEmpty() && isPaymentAlert(defaultTitle, lineStr)) {
                         saveToNotificationCacheQueue(defaultTitle, lineStr, packageName, sbn.postTime)
                         try { processAndSaveBackgroundTransaction(defaultTitle, lineStr, sbn.postTime) } catch (e: Exception) { Log.e(TAG, "Error in processAndSaveBackgroundTransaction", e) }
                         broadcastNotification(defaultTitle, lineStr, packageName, sbn.postTime)
@@ -158,7 +158,8 @@ class BankNotificationListenerService : NotificationListenerService() {
                 val summaryText = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString() ?: ""
 
                 val combinedBody = "$text $bigText $subText $summaryText".trim()
-                if (defaultTitle.isNotEmpty() || combinedBody.isNotEmpty()) {
+                if ((defaultTitle.isNotEmpty() || combinedBody.isNotEmpty()) &&
+                    isPaymentAlert(defaultTitle, combinedBody)) {
                     saveToNotificationCacheQueue(defaultTitle, combinedBody, packageName, sbn.postTime)
                     try { processAndSaveBackgroundTransaction(defaultTitle, combinedBody, sbn.postTime) } catch (e: Exception) { Log.e(TAG, "Error in processAndSaveBackgroundTransaction", e) }
                     broadcastNotification(defaultTitle, combinedBody, packageName, sbn.postTime)
@@ -186,8 +187,19 @@ class BankNotificationListenerService : NotificationListenerService() {
 
     private fun isOfficialBankSenderTitle(title: String): Boolean {
         val clean = title.trim().uppercase(Locale.ROOT)
-        if (clean.isEmpty()) return false
-        if (clean.contains("SYSTEM") || clean.contains("NOTIFICATION") || clean.length > 35) return false
+        if (clean.isEmpty() || clean.length > 35) return false
+        val blockedWords = arrayOf(
+            "SYSTEM", "NOTIFICATION", "MESSAGES", "ALERT", "AIRTEL", "JIO",
+            "VODAFONE", "IDEA", "BSNL", "ACT", "SWIGGY", "ZOMATO", "AMAZON",
+            "FLIPKART", "MYNTRA", "UBER", "OLA", "DOMINOS", "MEESHO", "NYKAA",
+            "VAAHAN", "SARATHI", "PARIVAHAN", "ECHALLAN", "WLPARK", "WONDERLA",
+            "MYGMSG", "MYG", "UIICHO", "UIIC", "PHONPE", "PHONEPE", "GPAY",
+            "MOBIKW", "FREECH", "PAYTM", "IRCTC", "MAKEMY", "GOIBIB", "YATRA",
+            "REDBUS", "BOOKMY", "PVR", "INOX", "CROMA", "VIJAYS", "RELIAN", "DMART"
+        )
+        for (b in blockedWords) {
+            if (clean.contains(b)) return false
+        }
         return true
     }
 
@@ -216,40 +228,56 @@ class BankNotificationListenerService : NotificationListenerService() {
             if (lower.contains(kw)) return false
         }
 
-        return lower.contains("credited") ||
-                lower.contains("credit") ||
+        // Reject bill due, statement generated, and credit limit notices unless explicit transaction is present
+        if (lower.contains("bill due") || lower.contains("payment due") ||
+            lower.contains("statement generated") || lower.contains("e-statement") ||
+            lower.contains("credit limit") || lower.contains("minimum amount due") ||
+            lower.contains("total amount due")) {
+            if (!lower.contains("debited") && !lower.contains("credited") &&
+                !lower.contains("spent") && !lower.contains("spend") &&
+                !lower.contains("has been paid") && !lower.contains("paid rs") &&
+                !lower.contains("paid inr") && !lower.contains("paid ₹")) {
+                return false
+            }
+        }
+
+        // Reject OTP / verification codes unless there is an explicit debit/credit confirmation
+        if (lower.contains("otp") || lower.contains("one time password") ||
+            lower.contains("verification code") || lower.contains("secret code") ||
+            lower.contains("login code") || lower.contains("auth code")) {
+            if (!lower.contains("has been debited") && !lower.contains("is debited") &&
+                !lower.contains("has been credited") && !lower.contains("is credited")) {
+                return false
+            }
+        }
+
+        // Mandatory transaction action verbs (credited, debited, spent, spend, paid to/you, withdrawn, etc.)
+        val isExplicitAction = lower.contains("credited") ||
                 lower.contains("debited") ||
-                lower.contains("debit") ||
-                lower.contains("paid") ||
-                lower.contains("pay") ||
-                lower.contains("payment") ||
-                lower.contains("sent") ||
-                lower.contains("received") ||
                 lower.contains("spent") ||
-                lower.contains("transfer") ||
-                lower.contains("txn") ||
-                lower.contains("transaction") ||
-                lower.contains("ref") ||
-                lower.contains("rs") ||
-                lower.contains("inr") ||
-                lower.contains("₹") ||
-                lower.contains("a/c") ||
-                lower.contains("acct") ||
-                lower.contains("account") ||
-                lower.contains("upi") ||
-                lower.contains("gpay") ||
-                lower.contains("phonepe") ||
-                lower.contains("paytm") ||
-                lower.contains("kgbank") ||
-                lower.contains("hdfc") ||
-                lower.contains("sbi") ||
-                lower.contains("icici") ||
-                lower.contains("axis") ||
-                lower.contains("kotak") ||
-                lower.contains("pnb") ||
-                lower.contains("bob") ||
-                lower.contains("card") ||
-                lower.contains("alert")
+                lower.contains("spend") ||
+                lower.contains("paid to") ||
+                lower.contains("paid you") ||
+                lower.contains("withdrawn") ||
+                lower.contains("refund") ||
+                lower.contains("refunded") ||
+                lower.contains("deposited") ||
+                lower.contains("deducted") ||
+                lower.contains("transferred to") ||
+                lower.contains("received rs") ||
+                lower.contains("received inr") ||
+                lower.contains("received ₹")
+
+        if (isExplicitAction) return true
+
+        // For 'credit' or 'debit', ensure it's not a generic reference to 'credit card' or 'debit card'
+        if ((lower.contains("debit") || lower.contains("credit")) &&
+            !lower.contains("credit card") && !lower.contains("debit card") &&
+            !lower.contains("credit limit") && !lower.contains("dispatched")) {
+            return true
+        }
+
+        return false
     }
 
     private fun saveToNotificationCacheQueue(title: String, body: String, packageName: String, timestamp: Long) {

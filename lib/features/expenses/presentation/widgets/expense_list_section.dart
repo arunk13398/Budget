@@ -268,22 +268,82 @@ class _ExpenseListSectionState extends State<ExpenseListSection> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
+            Container(
+              margin: const EdgeInsets.fromLTRB(15, 8, 15, 12),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(0xFFE2E8F0),
+                  width: 0.8,
+                ),
+              ),
               child: TabBar(
                 onTap: (index) => setState(() => _transactionTabIndex = index),
-                dividerColor: Colors.white,
-                labelColor: Colors.black,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: Colors.black,
-                indicatorSize: TabBarIndicatorSize.label,
-                labelStyle: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                dividerColor: Colors.transparent,
+                labelColor: const Color(0xFF0F172A),
+                unselectedLabelColor: const Color(0xFF64748B),
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicator: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
                 ),
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                  letterSpacing: -0.2,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                  letterSpacing: -0.2,
+                ),
+                splashFactory: NoSplash.splashFactory,
+                overlayColor: WidgetStateProperty.all(Colors.transparent),
                 tabs: [
-                  Tab(text: 'DEBIT (${debitExpenses.length})'),
-                  Tab(text: 'CREDIT (${creditExpenses.length})'),
+                  Tab(
+                    height: 36,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.arrow_upward_rounded,
+                          size: 15,
+                          color: Color(0xFFEF4444),
+                        ),
+                        const SizedBox(width: 6),
+                        Text('DEBIT (${debitExpenses.length})'),
+                      ],
+                    ),
+                  ),
+                  Tab(
+                    height: 36,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.arrow_downward_rounded,
+                          size: 15,
+                          color: Color(0xFF10B981),
+                        ),
+                        const SizedBox(width: 6),
+                        Text('CREDIT (${creditExpenses.length})'),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

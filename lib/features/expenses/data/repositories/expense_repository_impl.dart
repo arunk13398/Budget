@@ -50,7 +50,10 @@ List<ExpenseModel> _parseExpensesIsolate(String encryptedJson) {
   final List<ExpenseModel> deduplicated = [];
   
   for (var e in rawList) {
-    if (isPromotionalOrAdText('${e.name} ${e.bank}')) {
+    if (isPromotionalOrAdText('${e.name} ${e.bank}') ||
+        isDeclinedOrFailedText(e.name) ||
+        isCardEndingOrDeclinedMerchant(e.name) ||
+        isStatementOrBillText(e.name)) {
       continue;
     }
 
@@ -127,7 +130,12 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
 
   List<Expense> _getRawExpenses() {
     if (_cachedExpenses != null) return List.from(_cachedExpenses!);
-    _cachedExpenses = expenseLocalDataSource.getExpenses();
+    final raw = expenseLocalDataSource.getExpenses();
+    final valid = raw.where((e) =>
+        !isDeclinedOrFailedText(e.name) &&
+        !isCardEndingOrDeclinedMerchant(e.name) &&
+        !isStatementOrBillText(e.name)).toList();
+    _cachedExpenses = valid;
     return List.from(_cachedExpenses!);
   }
 
@@ -153,7 +161,13 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     final expenses = _getRawExpenses().map((e) => e as ExpenseModel).toList();
     bool changed = false;
 
-    for (var expense in newExpenses) {
+    // Filter out any declined, failed, card-ending, or statement noise items
+    final validNewExpenses = newExpenses.where((e) =>
+        !isDeclinedOrFailedText(e.name) &&
+        !isCardEndingOrDeclinedMerchant(e.name) &&
+        !isStatementOrBillText(e.name)).toList();
+
+    for (var expense in validNewExpenses) {
       final model = ExpenseModel(
         id: expense.id.isEmpty || expense.id.startsWith('temp_')
             ? DateTime.now().millisecondsSinceEpoch.toString()
@@ -168,22 +182,68 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
 
       final index = expenses.indexWhere((e) => e.id == model.id);
       if (index != -1) {
-        expenses[index] = model;
-        await expenseLocalDataSource.saveExpense(model);
+        final existing = expenses[index];
+        final betterName = _isBetterMerchantName(model.name, existing.name) ? model.name : existing.name;
+        final updated = ExpenseModel(
+          id: existing.id,
+          name: betterName,
+          amount: model.amount,
+          date: model.date.hour == 0 && existing.date.hour != 0 ? existing.date : model.date,
+          bank: model.bank,
+          category: model.category,
+          type: model.type,
+        );
+        expenses[index] = updated;
+        await expenseLocalDataSource.saveExpense(updated);
         changed = true;
       } else {
-        final dupIndex = expenses.indexWhere((e) =>
-          e.bank.toUpperCase() == model.bank.toUpperCase() &&
-          e.amount == model.amount &&
-          (e.date.difference(model.date).inSeconds).abs() <= 120
-        );
+        final dupIndex = expenses.indexWhere((e) {
+          final sameBank = e.bank.toUpperCase() == model.bank.toUpperCase();
+          if (!sameBank) return false;
+          if (e.amount != model.amount) return false;
+
+          // 1. Time window match (within 2 minutes)
+          final diffSec = (e.date.difference(model.date).inSeconds).abs();
+          if (diffSec <= 120) return true;
+
+          // 2. Same calendar day match if one date is at midnight (00:00:00) due to body date parser
+          final isOneMidnight = (e.date.hour == 0 && e.date.minute == 0 && e.date.second == 0) ||
+                                (model.date.hour == 0 && model.date.minute == 0 && model.date.second == 0);
+          final sameDay = e.date.year == model.date.year &&
+                          e.date.month == model.date.month &&
+                          e.date.day == model.date.day;
+
+          if (isOneMidnight && sameDay) {
+            return true;
+          }
+
+          // 3. ID or reference number matching
+          final eRef = e.id.split('_').last;
+          final modelRef = model.id.split('_').last;
+          if (eRef.length >= 6 && modelRef.length >= 6 && eRef == modelRef) {
+            return true;
+          }
+
+          return false;
+        });
 
         if (dupIndex != -1) {
-          if (_isBetterMerchantName(model.name, expenses[dupIndex].name)) {
-            expenses[dupIndex] = model;
-            await expenseLocalDataSource.saveExpense(model);
-            changed = true;
-          }
+          final existing = expenses[dupIndex];
+          final betterName = _isBetterMerchantName(model.name, existing.name) ? model.name : existing.name;
+          final betterId = (!model.id.contains('notif_') && existing.id.contains('notif_')) ? model.id : existing.id;
+          final betterDate = (model.date.hour == 0 && existing.date.hour != 0) ? existing.date : model.date;
+          final updated = ExpenseModel(
+            id: betterId,
+            name: betterName,
+            amount: model.amount,
+            date: betterDate,
+            bank: model.bank,
+            category: model.category,
+            type: model.type,
+          );
+          expenses[dupIndex] = updated;
+          await expenseLocalDataSource.saveExpense(updated);
+          changed = true;
         } else {
           expenses.add(model);
           await expenseLocalDataSource.saveExpense(model);
