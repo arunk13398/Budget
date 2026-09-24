@@ -94,8 +94,8 @@ class CombinedGroupBarChart extends StatelessWidget {
             show: true,
             alignment: Alignment.topRight,
             padding: const EdgeInsets.only(right: 5, bottom: 2),
-            style: TextStyle(
-              color: Color(groupColors[e.key] ?? Colors.grey.value),
+            style: const TextStyle(
+              color: Colors.black,
               fontSize: 7,
               fontWeight: FontWeight.bold,
             ),

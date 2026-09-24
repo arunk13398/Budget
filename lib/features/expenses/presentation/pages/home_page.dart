@@ -3610,54 +3610,84 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 ),
                 trailing: groupName == 'Unread'
                     ? const SizedBox()
-                    : IconButton(
-                        color: Colors.red,
-                        icon: Icon(
-                          Icons.remove_circle_outline_outlined,
-                          color: Colors.black,
-                        ),
-                        onPressed: () async {
-                          final confirm = await _showAttractiveDeleteDialog(
-                            context: context,
-                            title: 'Delete Group',
-                            itemName: groupName,
-                            message:
-                                'Are you sure you want to delete the group "$groupName"? Merchants assigned to this group will become unassigned.',
-                          );
-                          if (confirm == true) {
-                            setState(() {
-                              categoryGroups.removeWhere(
-                                (m, g) => g == groupName,
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Image.asset(
+                              'assets/edit_icon.png',
+                              width: 18,
+                              height: 18,
+                              color: Colors.black,
+                            ),
+                            tooltip: 'Edit Group',
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                            onPressed: () =>
+                                _showEditGroupDialog(context, groupName),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            color: Colors.red,
+                            icon: const Icon(
+                              Icons.remove_circle_outline_outlined,
+                              color: Colors.black,
+                              size: 20,
+                            ),
+                            tooltip: 'Delete Group',
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                            onPressed: () async {
+                              final confirm = await _showAttractiveDeleteDialog(
+                                context: context,
+                                title: 'Delete Group',
+                                itemName: groupName,
+                                message:
+                                    'Are you sure you want to delete the group "$groupName"? Merchants assigned to this group will become unassigned.',
                               );
-                              groupColors.remove(groupName);
-                              groupLimits.remove(groupName);
-                            });
-                            await _saveSettings();
-                          }
-                        },
+                              if (confirm == true) {
+                                setState(() {
+                                  categoryGroups.removeWhere(
+                                    (m, g) => g == groupName,
+                                  );
+                                  transactionGroups.removeWhere(
+                                    (t, g) => g == groupName,
+                                  );
+                                  groupColors.remove(groupName);
+                                  groupLimits.remove(groupName);
+                                  _cachedUniqueNames = null;
+                                  _cachedLabelGroups = null;
+                                });
+                                await _saveSettings();
+                              }
+                            },
+                          ),
+                        ],
                       ),
                 children: [
                   Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (groupName != 'Unread') ...[
                           Row(
                             children: [
-                              Text(
+                              const Text(
                                 'Monthly Limit:',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              SizedBox(width: 12),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: TextField(
                                   key: ValueKey('group_limit_$groupName'),
                                   keyboardType: TextInputType.number,
-                                  style: TextStyle(fontSize: 13),
+                                  style: const TextStyle(fontSize: 13),
                                   decoration: InputDecoration(
                                     filled: true,
                                     fillColor: Colors.white,
@@ -3685,13 +3715,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
+                                      borderSide: const BorderSide(
                                         color: Colors.blue,
                                         width: 1.5,
                                       ),
                                     ),
 
-                                    contentPadding: EdgeInsets.symmetric(
+                                    contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 10,
                                     ),
@@ -3708,9 +3738,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                               ),
                             ],
                           ),
-                          SizedBox(height: 16),
+                          const SizedBox(height: 16),
                         ],
-                        Text(
+                        const Text(
                           'Assigned Merchants:',
                           style: TextStyle(
                             fontSize: 11,
@@ -3718,7 +3748,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                             color: Colors.grey,
                           ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Wrap(
                           spacing: 6,
                           runSpacing: 6,
@@ -3727,18 +3757,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 (m) => Chip(
                                   label: Text(
                                     m,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 10,
                                       color: Colors.black,
                                     ),
                                   ),
-                                  deleteIcon: Icon(
+                                  deleteIcon: const Icon(
                                     Icons.close,
                                     size: 12,
                                     color: Colors.black,
                                   ),
-                                  onDeleted: () =>
-                                      setState(() => categoryGroups.remove(m)),
+                                  onDeleted: () {
+                                    setState(() => categoryGroups.remove(m));
+                                    _saveSettings();
+                                  },
                                   backgroundColor: Colors.blue.shade50,
                                   side: BorderSide(
                                     color: Colors.blue.withOpacity(0.3),
@@ -3751,6 +3783,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                               )
                               .toList(),
                         ),
+                        if (groupName != 'Unread') ...[
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () =>
+                                  _showEditGroupDialog(context, groupName),
+                              icon: Image.asset(
+                                'assets/edit_icon.png',
+                                width: 14,
+                                height: 14,
+                                color: color,
+                              ),
+                              label: const Text(
+                                'Edit Name, Limit & Theme Color',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                foregroundColor: color,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -4932,7 +4991,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 bottomLeft: Radius.circular(30),
               ),
             ),
-            width: math.min(MediaQuery.of(context).size.width * 0.90, 420.0),
+            width: math.min(MediaQuery.of(context).size.width * 0.93, 420.0),
             child: SafeArea(
               top: true,
               bottom: true,
@@ -6104,20 +6163,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Row(
+                                          const Text(
+                                            'TRANSACTIONS',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF1E293B),
+                                              fontSize: 13,
+                                              letterSpacing: 1.2,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 10,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
                                             children: [
-                                              const Text(
-                                                'TRANSACTIONS',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF1E293B),
-                                                  fontSize: 13,
-                                                  letterSpacing: 1.2,
-                                                ),
-                                              ),
-                                              const Spacer(),
                                               _buildSyncButton(context),
-                                              SizedBox(width: 5),
                                               GestureDetector(
                                                 onTap: () {
                                                   final cardDueDateVal =
@@ -6214,16 +6276,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                                   ),
                                                 ),
                                               ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          // Responsive action chips wrap
-                                          Wrap(
-                                            spacing: 8,
-                                            runSpacing: 8,
-                                            crossAxisAlignment:
-                                                WrapCrossAlignment.center,
-                                            children: [
                                               //Date filters
                                               PopupMenuButton<int?>(
                                                 onSelected: (week) {
@@ -6242,10 +6294,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                                 color: Colors.white,
                                                 tooltip: 'Filter by Week',
                                                 child: Container(
-                                                  margin:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                      ),
                                                   padding:
                                                       const EdgeInsets.symmetric(
                                                         horizontal: 12,
@@ -6532,6 +6580,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                               _buildAddNewButton(context),
                                             ],
                                           ),
+                                          const SizedBox(height: 10),
                                         ],
                                       ),
                                     ),
@@ -6872,20 +6921,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                       padding: const EdgeInsets.all(18),
                       child: Column(
                         children: [
-                          Row(
+                          const Text(
+                            'TRANSACTIONS',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B),
+                              fontSize: 13,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              const Text(
-                                'TRANSACTIONS',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                  fontSize: 13,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              const Spacer(),
                               _buildSyncButton(context),
-                              const SizedBox(width: 8),
                               _buildAddNewButton(context),
                             ],
                           ),
@@ -7581,6 +7632,807 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         backgroundColor: Colors.red.shade700,
         duration: const Duration(seconds: 2),
       ),
+    );
+  }
+
+  void _showEditGroupDialog(BuildContext context, String currentGroupName) {
+    final TextEditingController nameController =
+        TextEditingController(text: currentGroupName);
+    final double? currentLimit = groupLimits[currentGroupName];
+    final TextEditingController limitController = TextEditingController(
+      text: (currentLimit != null && currentLimit > 0)
+          ? currentLimit.toStringAsFixed(0)
+          : '',
+    );
+    int selectedColor =
+        groupColors[currentGroupName] ?? Colors.blue.toARGB32();
+    String? nameError;
+    String? colorError;
+
+    final List<Color> colors = [
+      const Color(0xFF2563EB), // Royal Blue
+      const Color(0xFFDC2626), // Crimson Red
+      const Color(0xFF16A34A), // Emerald Green
+      const Color(0xFFD97706), // Amber Gold
+      const Color(0xFF9333EA), // Deep Purple
+      const Color(0xFF0D9488), // Teal
+      const Color(0xFFDB2777), // Rose Pink
+      const Color(0xFF4F46E5), // Indigo
+      const Color(0xFFEA580C), // Sunset Orange
+      const Color(0xFF0891B2), // Cyan
+      const Color(0xFF84CC16), // Lime Green
+      const Color(0xFF7C3AED), // Violet
+      const Color(0xFFB45309), // Bronze
+      const Color(0xFF0284C7), // Sky Blue
+      const Color(0xFF475569), // Slate Gray
+      const Color(0xFFE11D48), // Ruby Coral
+    ];
+
+    bool showCustomPicker =
+        !colors.any((c) => c.toARGB32() == selectedColor);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final activeColor = Color(selectedColor);
+            final assignedMerchants = categoryGroups.entries
+                .where((e) => e.value == currentGroupName)
+                .map((e) => e.key)
+                .toList();
+
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              elevation: 12,
+              backgroundColor: Colors.white,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.88,
+                padding: const EdgeInsets.all(22),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Badge & Title
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: activeColor.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Image.asset(
+                              'assets/edit_icon.png',
+                              color: activeColor,
+                              width: 22,
+                              height: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Edit Label & Group',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                Text(
+                                  currentGroupName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: Colors.red,
+                              size: 20,
+                            ),
+                            tooltip: 'Delete Group',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () async {
+                              final confirm = await _showAttractiveDeleteDialog(
+                                context: context,
+                                title: 'Delete Group',
+                                itemName: currentGroupName,
+                                message:
+                                    'Are you sure you want to delete the group "$currentGroupName"? Merchants assigned to this group will become unassigned.',
+                              );
+                              if (confirm == true) {
+                                setState(() {
+                                  categoryGroups.removeWhere(
+                                    (m, g) => g == currentGroupName,
+                                  );
+                                  transactionGroups.removeWhere(
+                                    (t, g) => g == currentGroupName,
+                                  );
+                                  groupColors.remove(currentGroupName);
+                                  groupLimits.remove(currentGroupName);
+                                  _cachedUniqueNames = null;
+                                  _cachedLabelGroups = null;
+                                });
+                                await _saveSettings();
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      const Text(
+                        'LABEL NAME',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF94A3B8),
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: nameController,
+                        onChanged: (_) {
+                          if (nameError != null) {
+                            setDialogState(() => nameError = null);
+                          }
+                        },
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Shopping, Rent',
+                          hintStyle: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 13,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          prefixIcon: const Icon(
+                            Icons.label_outline_rounded,
+                            size: 20,
+                            color: Color(0xFF64748B),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: nameError != null
+                                  ? Colors.red
+                                  : const Color(0xFFE2E8F0),
+                              width: nameError != null ? 1.5 : 1.0,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: nameError != null
+                                  ? Colors.red
+                                  : Colors.blue.shade600,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (nameError != null) ...[
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline_rounded,
+                              color: Colors.red,
+                              size: 13,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              nameError!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+
+                      const Text(
+                        'MONTHLY BUDGET LIMIT',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF94A3B8),
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: limitController,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Set monthly budget (optional)',
+                          hintStyle: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 13,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          prefixIcon: const Icon(
+                            Icons.account_balance_wallet_outlined,
+                            size: 20,
+                            color: Color(0xFF64748B),
+                          ),
+                          prefixText: '₹ ',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Colors.blue.shade600,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Theme Color Section
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'THEME COLOR',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF94A3B8),
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: Color(selectedColor),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 1.5,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Color(selectedColor)
+                                                .withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      '#${(selectedColor & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                        color: Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                onTap: () {
+                                  setDialogState(() {
+                                    showCustomPicker = !showCustomPicker;
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: showCustomPicker
+                                        ? const Color(0xFFEFF6FF)
+                                        : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: showCustomPicker
+                                          ? const Color(0xFF3B82F6)
+                                          : const Color(0xFFCBD5E1),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        showCustomPicker
+                                            ? Icons.palette_outlined
+                                            : Icons.colorize_rounded,
+                                        size: 13,
+                                        color: showCustomPicker
+                                            ? const Color(0xFF2563EB)
+                                            : const Color(0xFF475569),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        showCustomPicker
+                                            ? 'Presets'
+                                            : 'Color Picker',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: showCustomPicker
+                                              ? const Color(0xFF2563EB)
+                                              : const Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (showCustomPicker) ...[
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              const areaHeightPercent = 0.48;
+                              final pickerHeight =
+                                  (constraints.maxWidth * areaHeightPercent) +
+                                      62.0;
+                              return SizedBox(
+                                height: pickerHeight,
+                                child: ClipRect(
+                                  child: OverflowBox(
+                                    alignment: Alignment.topCenter,
+                                    maxHeight: double.infinity,
+                                    child: ColorPicker(
+                                      pickerColor: Color(selectedColor),
+                                      onColorChanged: (newColor) {
+                                        setDialogState(() {
+                                          selectedColor = newColor.toARGB32();
+                                          colorError = null;
+                                        });
+                                      },
+                                      colorPickerWidth: constraints.maxWidth,
+                                      pickerAreaHeightPercent:
+                                          areaHeightPercent,
+                                      enableAlpha: false,
+                                      displayThumbColor: true,
+                                      paletteType: PaletteType.hsvWithHue,
+                                      labelTypes: const [],
+                                      hexInputBar: false,
+                                      pickerAreaBorderRadius:
+                                          BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ] else ...[
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            ...colors.map((color) {
+                              final isSelected =
+                                  selectedColor == color.toARGB32();
+                              return GestureDetector(
+                                onTap: () {
+                                  setDialogState(() {
+                                    selectedColor = color.toARGB32();
+                                    colorError = null;
+                                  });
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? const Color(0xFF0F172A)
+                                          : Colors.transparent,
+                                      width: isSelected ? 2.5 : 0,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: color.withValues(
+                                          alpha: isSelected ? 0.45 : 0.2,
+                                        ),
+                                        blurRadius: isSelected ? 8 : 4,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: isSelected
+                                      ? const Icon(
+                                          Icons.check_rounded,
+                                          color: Colors.white,
+                                          size: 18,
+                                        )
+                                      : null,
+                                ),
+                              );
+                            }),
+                            GestureDetector(
+                              onTap: () {
+                                setDialogState(() {
+                                  showCustomPicker = true;
+                                });
+                              },
+                              child: Tooltip(
+                                message: 'Open Color Picker',
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const SweepGradient(
+                                      colors: [
+                                        Colors.red,
+                                        Colors.amber,
+                                        Colors.green,
+                                        Colors.cyan,
+                                        Colors.blue,
+                                        Colors.purple,
+                                        Colors.red,
+                                      ],
+                                    ),
+                                    border: Border.all(
+                                      color: !colors.any((c) =>
+                                              c.toARGB32() == selectedColor)
+                                          ? const Color(0xFF0F172A)
+                                          : const Color(0xFFCBD5E1),
+                                      width: !colors.any((c) =>
+                                              c.toARGB32() == selectedColor)
+                                          ? 2.5
+                                          : 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: !colors.any((c) =>
+                                                c.toARGB32() == selectedColor)
+                                            ? Color(selectedColor)
+                                            : Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        !colors.any((c) =>
+                                                c.toARGB32() == selectedColor)
+                                            ? Icons.check_rounded
+                                            : Icons.colorize_rounded,
+                                        size: 13,
+                                        color: !colors.any((c) =>
+                                                c.toARGB32() == selectedColor)
+                                            ? Colors.white
+                                            : const Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (colorError != null) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline_rounded,
+                              color: Colors.red,
+                              size: 13,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              colorError!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+
+                      // Assigned Merchants overview
+                      if (assignedMerchants.isNotEmpty) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'LINKED MERCHANTS',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF94A3B8),
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            Text(
+                              '${assignedMerchants.length} linked',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: assignedMerchants.map((m) {
+                            return Chip(
+                              label: Text(
+                                m,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              deleteIcon: const Icon(
+                                Icons.close,
+                                size: 12,
+                                color: Colors.black54,
+                              ),
+                              onDeleted: () {
+                                setState(() {
+                                  categoryGroups.remove(m);
+                                });
+                                setDialogState(() {});
+                                _saveSettings();
+                              },
+                              backgroundColor:
+                                  activeColor.withValues(alpha: 0.1),
+                              side: BorderSide(
+                                color: activeColor.withValues(alpha: 0.25),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                            );
+                          }).toList(),
+                        ),
+                      ],
+
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                side:
+                                    const BorderSide(color: Color(0xFFCBD5E1)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF475569),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                backgroundColor: const Color(0xFF0F172A),
+                                elevation: 4,
+                                shadowColor: Colors.black.withValues(alpha: 0.3),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () async {
+                                final newName = nameController.text.trim();
+                                if (newName.isEmpty) {
+                                  setDialogState(() {
+                                    nameError = 'Label name cannot be empty';
+                                  });
+                                  return;
+                                }
+
+                                if (newName.toLowerCase() !=
+                                        currentGroupName.toLowerCase() &&
+                                    groupColors.keys.any((k) =>
+                                        k.toLowerCase() ==
+                                        newName.toLowerCase())) {
+                                  setDialogState(() {
+                                    nameError =
+                                        'A group named "$newName" already exists';
+                                  });
+                                  return;
+                                }
+
+                                final parsedLimit =
+                                    double.tryParse(limitController.text) ??
+                                        0.0;
+
+                                setState(() {
+                                  if (newName != currentGroupName) {
+                                    // Update categoryGroups
+                                    final toUpdateCat = <String>[];
+                                    categoryGroups.forEach((k, v) {
+                                      if (v == currentGroupName) {
+                                        toUpdateCat.add(k);
+                                      }
+                                    });
+                                    for (var k in toUpdateCat) {
+                                      categoryGroups[k] = newName;
+                                    }
+
+                                    // Update transactionGroups
+                                    final toUpdateTx = <String>[];
+                                    transactionGroups.forEach((k, v) {
+                                      if (v == currentGroupName) {
+                                        toUpdateTx.add(k);
+                                      }
+                                    });
+                                    for (var k in toUpdateTx) {
+                                      transactionGroups[k] = newName;
+                                    }
+
+                                    // Remove old keys
+                                    groupColors.remove(currentGroupName);
+                                    groupLimits.remove(currentGroupName);
+
+                                    // Update temp selections if present
+                                    if (_tempSelectedExpenseNames != null) {
+                                      final idx = _tempSelectedExpenseNames!
+                                          .indexOf(currentGroupName);
+                                      if (idx != -1) {
+                                        _tempSelectedExpenseNames![idx] =
+                                            newName;
+                                      }
+                                    }
+                                  }
+
+                                  groupColors[newName] = selectedColor;
+                                  groupLimits[newName] = parsedLimit;
+
+                                  _cachedUniqueNames = null;
+                                  _cachedLabelGroups = null;
+                                });
+
+                                await _saveSettings();
+
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Updated group "$newName"'),
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: const Text(
+                                'Save Changes',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
