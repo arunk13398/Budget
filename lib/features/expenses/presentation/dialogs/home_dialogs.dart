@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import '../widgets/simple_color_slider_picker.dart';
 import '../providers/expense_provider.dart';
 
 void showDeleteConfirmation(BuildContext context, WidgetRef ref, String id) {
@@ -393,11 +393,12 @@ void showGroupingDialog({
                             ],
                           ),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
+                                height: 26,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
-                                  vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFF1F5F9),
@@ -408,6 +409,7 @@ void showGroupingDialog({
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Container(
                                       width: 12,
@@ -450,9 +452,9 @@ void showGroupingDialog({
                                 },
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
+                                  height: 26,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
-                                    vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
                                     color: showCustomPicker
@@ -467,6 +469,7 @@ void showGroupingDialog({
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
                                       Icon(
                                         showCustomPicker
@@ -501,50 +504,13 @@ void showGroupingDialog({
                       const SizedBox(height: 12),
 
                       if (showCustomPicker) ...[
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              const areaHeightPercent = 0.48;
-                              final pickerHeight =
-                                  (constraints.maxWidth * areaHeightPercent) +
-                                      62.0;
-                              return SizedBox(
-                                height: pickerHeight,
-                                child: ClipRect(
-                                  child: OverflowBox(
-                                    alignment: Alignment.topCenter,
-                                    maxHeight: double.infinity,
-                                    child: ColorPicker(
-                                      pickerColor: Color(selectedColor),
-                                      onColorChanged: (newColor) {
-                                        setDialogState(() {
-                                          selectedColor = newColor.toARGB32();
-                                        });
-                                      },
-                                      colorPickerWidth: constraints.maxWidth,
-                                      pickerAreaHeightPercent:
-                                          areaHeightPercent,
-                                      enableAlpha: false,
-                                      displayThumbColor: true,
-                                      paletteType: PaletteType.hsvWithHue,
-                                      labelTypes: const [],
-                                      hexInputBar: false,
-                                      pickerAreaBorderRadius:
-                                          BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                        SimpleColorSliderPicker(
+                          pickerColor: Color(selectedColor),
+                          onColorChanged: (newColor) {
+                            setDialogState(() {
+                              selectedColor = newColor.toARGB32();
+                            });
+                          },
                         ),
                       ] else ...[
                         Wrap(

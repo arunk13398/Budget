@@ -49,7 +49,6 @@ class _CustomBlueDatePickerDialogState
 
   @override
   Widget build(BuildContext context) {
-    final primaryBlue = widget.primaryColor ?? const Color(0xFF090909);
     final monthName = DateFormat('MMM').format(_displayedMonth);
     final yearStr = _displayedMonth.year.toString();
 
@@ -280,14 +279,37 @@ class _CustomBlueDatePickerDialogState
                           : null,
                       child: Container(
                         decoration: BoxDecoration(
+                          gradient: isSelected
+                              ? const LinearGradient(
+                                  colors: [
+                                    Color(0xFF0D2260),
+                                    Color(0xFF13368E),
+                                    Color(0xFF1E52E8),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
                           color: isSelected
-                              ? primaryBlue
+                              ? null
                               : (isFuture ? const Color(0xFFF8FAFC) : Colors.transparent),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: isFuture ? const Color(0xFFF1F5F9) : const Color(0xFFF1F5F9),
+                            color: isSelected
+                                ? Colors.transparent
+                                : (isFuture ? const Color(0xFFF1F5F9) : const Color(0xFFF1F5F9)),
                             width: 0.5,
                           ),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF1E52E8)
+                                        .withValues(alpha: 0.38),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
                         ),
                         alignment: Alignment.center,
                         child: Text(
@@ -330,9 +352,10 @@ class _CustomBlueDatePickerDialogState
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryBlue,
+                        backgroundColor: const Color(0xFF1E52E8),
                         foregroundColor: Colors.white,
-                        elevation: 0,
+                        elevation: 2,
+                        shadowColor: const Color(0xFF1E52E8).withValues(alpha: 0.4),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 24,
                           vertical: 12,

@@ -25,13 +25,35 @@ subprojects {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
+    tasks.withType<JavaCompile>().configureEach {
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
+    }
     afterEvaluate {
-        if (project.hasProperty("android")) {
-            val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
-            android?.compileOptions {
-                sourceCompatibility = JavaVersion.VERSION_17
-                targetCompatibility = JavaVersion.VERSION_17
-            }
+        val androidExt = project.extensions.findByName("android")
+        if (androidExt != null) {
+            try {
+                val setCompileSdk = androidExt.javaClass.methods.firstOrNull { 
+                    it.name == "setCompileSdk" && it.parameterCount == 1 
+                }
+                setCompileSdk?.invoke(androidExt, 36)
+            } catch (_: Exception) {}
+            try {
+                val compileSdkVersion = androidExt.javaClass.methods.firstOrNull { 
+                    it.name == "compileSdkVersion" && it.parameterCount == 1 && it.parameterTypes[0] == Integer.TYPE 
+                }
+                compileSdkVersion?.invoke(androidExt, 36)
+            } catch (_: Exception) {}
+            try {
+                val getCompileOptions = androidExt.javaClass.methods.firstOrNull { it.name == "getCompileOptions" }
+                val compileOptions = getCompileOptions?.invoke(androidExt)
+                if (compileOptions != null) {
+                    val setSource = compileOptions.javaClass.methods.firstOrNull { it.name == "setSourceCompatibility" && it.parameterCount == 1 }
+                    setSource?.invoke(compileOptions, JavaVersion.VERSION_17)
+                    val setTarget = compileOptions.javaClass.methods.firstOrNull { it.name == "setTargetCompatibility" && it.parameterCount == 1 }
+                    setTarget?.invoke(compileOptions, JavaVersion.VERSION_17)
+                }
+            } catch (_: Exception) {}
         }
     }
 }
@@ -52,15 +74,24 @@ subprojects {
 
 subprojects {
     val fixNamespace = {
-        if (project.hasProperty("android")) {
-            val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
-            if (android != null && android.namespace == null) {
+        val androidExt = project.extensions.findByName("android")
+        if (androidExt != null) {
+            val getNamespace = try {
+                androidExt.javaClass.methods.firstOrNull { it.name == "getNamespace" && it.parameterCount == 0 }
+            } catch (_: Exception) { null }
+            val currentNamespace = getNamespace?.invoke(androidExt)
+            if (currentNamespace == null) {
                 val manifestFile = project.file("src/main/AndroidManifest.xml")
                 if (manifestFile.exists()) {
                     val manifestXml = manifestFile.readText()
                     val packageMatch = Regex("package=\"([^\"]+)\"").find(manifestXml)
                     if (packageMatch != null) {
-                        android.namespace = packageMatch.groupValues[1]
+                        try {
+                            val setNamespace = androidExt.javaClass.methods.firstOrNull {
+                                it.name == "setNamespace" && it.parameterCount == 1
+                            }
+                            setNamespace?.invoke(androidExt, packageMatch.groupValues[1])
+                        } catch (_: Exception) {}
                     }
                 }
             }

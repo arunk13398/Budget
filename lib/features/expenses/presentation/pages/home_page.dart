@@ -28,10 +28,11 @@ import '../widgets/expense_line_chart.dart';
 import '../widgets/expense_pie_chart.dart';
 import '../widgets/transaction_item.dart';
 import '../widgets/warning_box.dart';
+import '../widgets/year_contribution_heatmap.dart';
+import '../widgets/simple_color_slider_picker.dart';
 import '../../../../core/services/sms_service.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../dialogs/custom_blue_date_picker_dialog.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../domain/repositories/expense_repository.dart';
 import '../../../../injection_container.dart' as di;
 
@@ -98,9 +99,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Map<String, String> cardThemes = {};
   Map<String, String> manualCards = {}; // cardName -> msgId
   Set<String> deletedCards = {};
+  Set<String> disabledCards = {};
 
   // Temporary Drawer State
   List<String>? _tempVisibleCards;
+  Set<String>? _tempDisabledCards;
   List<String>? _tempSelectedExpenseNames;
   String? _tempEditingCardName;
   Map<String, double>? _tempCardLimits;
@@ -119,6 +122,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   final GlobalKey _pieChartKey = GlobalKey();
   final GlobalKey _lineChartKey = GlobalKey();
+  int _analyticsPageIndex = 0;
+  final PageController _analyticsPageController = PageController();
   static const _notificationChannel =
       MethodChannel('com.budget.planning/notifications');
   final Map<String, double> _lastNotifiedSpending = {};
@@ -131,6 +136,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     final normTarget = normalizeBankName(name).trim().toUpperCase();
 
     for (final dc in deletedCards) {
+      final cleanDc = dc.trim().toUpperCase();
+      final normDc = normalizeBankName(dc).trim().toUpperCase();
+      if (cleanDc == target ||
+          normDc == target ||
+          cleanDc == normTarget ||
+          normDc == normTarget) {
+        return true;
+      }
+      if (target.length >= 3 && cleanDc.length >= 3) {
+        if (target.contains(cleanDc) || cleanDc.contains(target)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool _isCardDisabled(String? name) {
+    if (name == null || name.trim().isEmpty) return false;
+    final target = name.trim().toUpperCase();
+    final normTarget = normalizeBankName(name).trim().toUpperCase();
+
+    for (final dc in disabledCards) {
       final cleanDc = dc.trim().toUpperCase();
       final normDc = normalizeBankName(dc).trim().toUpperCase();
       if (cleanDc == target ||
@@ -330,6 +358,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     final savedCardName = prefs.getString('cardName') ?? '';
     final savedVisibleCards = prefs.getStringList('visibleCards') ?? [];
     final savedDeletedCards = prefs.getStringList('deletedCards') ?? [];
+    final savedDisabledCards = prefs.getStringList('disabledCards') ?? [];
     final cgJsonEncrypted = prefs.getString('categoryGroups');
     final gcJsonEncrypted = prefs.getString('groupColors');
     final tgJsonEncrypted = prefs.getString('transactionGroups');
@@ -395,6 +424,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     setState(() {
       deletedCards = savedDeletedCards.toSet();
+      disabledCards = savedDisabledCards.toSet();
       cardName = savedCardName;
       visibleCards = savedVisibleCards
           .where((card) =>
@@ -443,6 +473,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     await prefs.setString('cardName', cardName);
     await prefs.setStringList('visibleCards', visibleCards);
     await prefs.setStringList('deletedCards', deletedCards.toList());
+    await prefs.setStringList('disabledCards', disabledCards.toList());
 
     for (final entry in cardLimits.entries) {
       await prefs.setDouble('limit_${entry.key}', entry.value);
@@ -822,6 +853,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     WidgetsBinding.instance.removeObserver(this);
     _widgetUpdateDebounceTimer?.cancel();
     _monthScrollController.dispose();
+    _analyticsPageController.dispose();
     super.dispose();
   }
 
@@ -1014,6 +1046,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     }
 
     bool shouldSave = false;
+    final prefs = await SharedPreferences.getInstance();
+    if (!prefs.containsKey('disabledCards') && prefs.containsKey('visibleCards')) {
+      for (final g in groups) {
+        final isVis = visibleCards.contains(g.label) ||
+            visibleCards.contains(normalizeBankName(g.label));
+        if (!isVis && !_isCardDeleted(g.label)) {
+          disabledCards.add(g.label);
+          disabledCards.add(normalizeBankName(g.label));
+          shouldSave = true;
+        }
+      }
+    }
+
     setState(() {
       _bankGroups = groups;
 
@@ -1024,6 +1069,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           .where((c) =>
               isValidBankCardName(c, manualCards: manualCards) &&
               !_isCardDeleted(c) &&
+              !_isCardDisabled(c) &&
               (validCardLabels.contains(c) || manualCards.containsKey(c)))
           .toSet()
           .toList();
@@ -1038,15 +1084,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             .where((c) =>
                 isValidBankCardName(c, manualCards: manualCards) &&
                 !_isCardDeleted(c) &&
+                !_isCardDisabled(c) &&
                 (validCardLabels.contains(c) || manualCards.containsKey(c)))
             .toSet()
             .toList();
       }
 
       // Auto-add newly discovered clean bank card IDs/names into visibleCards filters and auto-save
+      // DO NOT auto-enable cards that were explicitly disabled by the user
       for (final g in groups) {
+        final isTempDisabled = _tempDisabledCards?.contains(g.label) ?? false;
+        final isTempExcluded =
+            _tempVisibleCards != null && !_tempVisibleCards!.contains(g.label);
         if (!visibleCards.contains(g.label) &&
             !_isCardDeleted(g.label) &&
+            !_isCardDisabled(g.label) &&
+            !isTempDisabled &&
+            !isTempExcluded &&
             (g.entries.isNotEmpty || manualCards.containsKey(g.label))) {
           visibleCards.add(g.label);
           shouldSave = true;
@@ -1444,8 +1498,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                             _bankGroups.removeWhere((g) => _isCardDeleted(g.label));
 
                             visibleCards.removeWhere((c) => _isCardDeleted(c));
+                            disabledCards.removeWhere((c) => _isCardDeleted(c));
 
                             _tempVisibleCards?.removeWhere((c) => _isCardDeleted(c));
+                            _tempDisabledCards?.removeWhere((c) => _isCardDeleted(c));
 
                             cardLimits.removeWhere((k, v) => _isCardDeleted(k));
                             _tempCardLimits?.removeWhere((k, v) => _isCardDeleted(k));
@@ -1501,8 +1557,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         setDrawerState(() {
                           if (selected) {
                             _tempVisibleCards!.add(group.label);
+                            _tempDisabledCards?.removeWhere((dc) =>
+                                dc.toUpperCase() == group.label.toUpperCase() ||
+                                dc.toUpperCase() ==
+                                    normalizeBankName(group.label).toUpperCase() ||
+                                group.label.toUpperCase().contains(dc.toUpperCase()) ||
+                                dc.toUpperCase().contains(group.label.toUpperCase()));
                           } else {
                             _tempVisibleCards!.remove(group.label);
+                            _tempDisabledCards ??= {};
+                            _tempDisabledCards!.add(group.label);
+                            _tempDisabledCards!.add(normalizeBankName(group.label));
                           }
                         });
                       },
@@ -1833,6 +1898,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 }
 
                                 deletedCards.removeWhere((dc) =>
+                                    dc.toUpperCase() == newCardName.toUpperCase() ||
+                                    dc.toUpperCase() == normalizeBankName(newCardName).toUpperCase() ||
+                                    newCardName.toUpperCase().contains(dc.toUpperCase()) ||
+                                    dc.toUpperCase().contains(newCardName.toUpperCase()));
+
+                                disabledCards.removeWhere((dc) =>
+                                    dc.toUpperCase() == newCardName.toUpperCase() ||
+                                    dc.toUpperCase() == normalizeBankName(newCardName).toUpperCase() ||
+                                    newCardName.toUpperCase().contains(dc.toUpperCase()) ||
+                                    dc.toUpperCase().contains(newCardName.toUpperCase()));
+                                _tempDisabledCards?.removeWhere((dc) =>
                                     dc.toUpperCase() == newCardName.toUpperCase() ||
                                     dc.toUpperCase() == normalizeBankName(newCardName).toUpperCase() ||
                                     newCardName.toUpperCase().contains(dc.toUpperCase()) ||
@@ -2341,20 +2417,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           ),
         ),
         Container(
-          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.grey.shade100),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
+                color: Colors.black.withValues(alpha: 0.02),
                 blurRadius: 10,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: child,
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: child,
+            ),
+          ),
         ),
         SizedBox(height: 10),
       ],
@@ -3584,14 +3666,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             final color = Color(groupColors[groupName]!);
 
             return Container(
-              margin: EdgeInsets.only(bottom: 12),
+              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: color.withOpacity(0.2)),
+                border: Border.all(color: color.withValues(alpha: 0.2)),
               ),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Material(
+                color: color.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: ExpansionTile(
+                  shape: const Border(),
+                  collapsedShape: const Border(),
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 leading: Container(
                   width: 12,
                   height: 12,
@@ -3815,8 +3902,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   ),
                 ],
               ),
-            );
-          }),
+            ),
+          );
+        }),
           SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 100),
         ],
       ),
@@ -4849,6 +4937,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     editingCardName = targetCard ?? cardName;
     // Reset temp state to current actual values
     _tempVisibleCards = null;
+    _tempDisabledCards = null;
     _tempSelectedExpenseNames = null;
     _tempEditingCardName = null;
     _tempCardLimits = null;
@@ -4999,6 +5088,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 builder: (context, setDrawerState) {
                   // Initialize local temp state once per drawer open
                   _tempVisibleCards ??= List.from(visibleCards);
+                  _tempDisabledCards ??= Set.from(disabledCards);
                   _tempSelectedExpenseNames ??= List.from(selectedExpenseNames);
                   _tempEditingCardName ??= editingCardName ?? cardName;
                   _tempCardLimits ??= Map.from(cardLimits);
@@ -5119,7 +5209,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                           children: [
                                             Icon(Icons.filter_list_rounded, size: 15),
                                             SizedBox(width: 4),
-                                            Text('Filter'),
+                                            Text('Settings'),
                                           ],
                                         ),
                                       ),
@@ -5182,6 +5272,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   onPressed: () {
                                     setState(() {
                                       _tempVisibleCards = null;
+                                      _tempDisabledCards = null;
                                       _tempSelectedExpenseNames = null;
                                       _tempEditingCardName = null;
                                       _tempCardLimits = null;
@@ -5225,6 +5316,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       visibleCards = List.from(
                                         _tempVisibleCards!,
                                       );
+                                      disabledCards = Set.from(_tempDisabledCards ?? disabledCards);
+                                      for (final g in _bankGroups) {
+                                        final norm = normalizeBankName(g.label);
+                                        if (visibleCards.contains(g.label) ||
+                                            visibleCards.contains(norm)) {
+                                          disabledCards.removeWhere((dc) =>
+                                              dc.toUpperCase() == g.label.toUpperCase() ||
+                                              dc.toUpperCase() == norm.toUpperCase() ||
+                                              g.label.toUpperCase().contains(dc.toUpperCase()) ||
+                                              dc.toUpperCase().contains(g.label.toUpperCase()));
+                                        } else {
+                                          disabledCards.add(g.label);
+                                          disabledCards.add(norm);
+                                        }
+                                      }
+                                      if (cardName.isNotEmpty && !visibleCards.contains(cardName)) {
+                                        cardName = visibleCards.isNotEmpty ? visibleCards.first : '';
+                                      }
                                       selectedExpenseNames = List.from(
                                         _tempSelectedExpenseNames!,
                                       );
@@ -5252,6 +5361,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
                                       // Reset temp state for next time
                                       _tempVisibleCards = null;
+                                      _tempDisabledCards = null;
                                       _tempSelectedExpenseNames = null;
                                       _tempEditingCardName = null;
                                       _tempCardLimits = null;
@@ -5361,35 +5471,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     // Restore Month Selector
                     Builder(
                       builder: (context) {
-                        final gradientColors = getCardThemeGradient(cardName);
+                        final currentCard = cardName.isNotEmpty
+                            ? cardName
+                            : (visibleCards.isNotEmpty ? visibleCards.first : '');
+                        final cardColors = getCardThemeGradient(currentCard);
+                        final activeGradient = cardColors.length >= 2
+                            ? [cardColors.first, cardColors.last]
+                            : [cardColors.first, cardColors.first];
+                        final primaryCardColor = cardColors.first;
+
                         return Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 15,
-                            vertical: 10,
+                            vertical: 8,
                           ),
                           child: Container(
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
+                              borderRadius: BorderRadius.circular(40),
                               color: Colors.white,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.03),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 8),
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 4),
                                 ),
                               ],
                               border: Border.all(
-                                color: Colors.grey.shade100,
-                                width: 1,
+                                color: const Color(0xFFF1F5F9),
+                                width: 1.2,
                               ),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
+                                horizontal: 6,
+                                vertical: 6,
                               ),
                               child: SizedBox(
-                                height: 32,
+                                height: 30,
                                 child: ListView.builder(
                                   controller: _monthScrollController,
                                   itemCount: months.length,
@@ -5408,70 +5526,91 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                           _scheduleWidgetUpdate();
                                         }
                                       },
-                                      child: AnimatedScale(
-                                        scale: isSelected ? 1.05 : 1.0,
+                                      child: AnimatedContainer(
                                         duration: const Duration(
-                                          milliseconds: 150,
+                                          milliseconds: 200,
                                         ),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(
-                                            milliseconds: 200,
-                                          ),
-                                          width: 85,
-                                          margin: const EdgeInsets.only(
-                                            right: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              30,
-                                            ),
-                                            gradient: isSelected
-                                                ? LinearGradient(
-                                                    colors: gradientColors,
-                                                    begin: Alignment.topLeft,
-                                                    end: Alignment.bottomRight,
-                                                  )
-                                                : null,
-                                            color: isSelected
-                                                ? null
-                                                : const Color(0xFFF8F9FA),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? Colors.transparent
-                                                  : Colors.grey.shade200,
-                                              width: 1,
-                                            ),
-                                            boxShadow: isSelected
-                                                ? [
-                                                    BoxShadow(
-                                                      color: gradientColors.last
-                                                          .withValues(
-                                                            alpha: 0.3,
-                                                          ),
-                                                      blurRadius: 10,
-                                                      offset: const Offset(
-                                                        0,
-                                                        4,
-                                                      ),
+                                        margin: const EdgeInsets.only(right: 8,),
+                                        padding: isSelected
+                                            ? const EdgeInsets.fromLTRB(3, 5, 8, 5,)
+                                            : const EdgeInsets.symmetric(
+                                                horizontal: 18,
+                                                vertical: 8,
+                                              ),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(30,),
+                                          gradient: isSelected
+                                              ? LinearGradient(
+                                                  colors: activeGradient,
+                                                  begin: Alignment.centerLeft,
+                                                  end: Alignment.centerRight,
+                                                )
+                                              : null,
+                                          color: isSelected
+                                              ? null
+                                              : const Color(0xFFF1F4F8),
+                                          border: isSelected
+                                              ? null
+                                              : Border.all(
+                                                  color: const Color(
+                                                    0xFFE2E8F0,
+                                                  ).withValues(alpha: 0.7),
+                                                  width: 0.8,
+                                                ),
+                                          boxShadow: isSelected
+                                              ? [
+                                                  BoxShadow(
+                                                    color: primaryCardColor
+                                                        .withValues(
+                                                          alpha: 0.35,
+                                                        ),
+                                                    blurRadius: 10,
+                                                    offset: const Offset(
+                                                      0,
+                                                      3,
                                                     ),
-                                                  ]
-                                                : null,
-                                          ),
-                                          child: Center(
-                                            child: Text(
+                                                  ),
+                                                ]
+                                              : null,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            if (isSelected) ...[
+                                              Container(
+                                                width: 28,
+                                                height: 28,
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.white,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                alignment: Alignment.center,
+                                                child: Text(
+                                                  '${DateTime.now().day}',
+                                                  style: TextStyle(
+                                                    color: primaryCardColor,
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w800,
+                                                    height: 1.0,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 2),
+                                            ],
+                                            Text(
                                               months[index].toUpperCase(),
                                               style: TextStyle(
                                                 color: isSelected
                                                     ? Colors.white
-                                                    : Colors.grey.shade600,
-                                                fontWeight: isSelected
-                                                    ? FontWeight.bold
-                                                    : FontWeight.w600,
-                                                fontSize: 11.5,
+                                                    : const Color(0xFF475569),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12.5,
                                                 letterSpacing: 0.8,
                                               ),
                                             ),
-                                          ),
+                                          ],
                                         ),
                                       ),
                                     );
@@ -5764,6 +5903,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 (sum, e) => sum + e.amount,
                               );
 
+                              final yearExpenses = state is ExpenseLoaded
+                                  ? state.data.expenses.where((expense) {
+                                      final matchesYear =
+                                          expense.date.year ==
+                                              DateTime.now().year;
+                                      final matchesBank =
+                                          cardName.isEmpty ||
+                                          expense.bank.toUpperCase().contains(
+                                            cardName.toUpperCase(),
+                                          ) ||
+                                          cardName.toUpperCase().contains(
+                                            expense.bank.toUpperCase(),
+                                          );
+                                      final isNotUnread =
+                                          _getGroupForExpense(expense) !=
+                                              'Unread';
+                                      final isSpent =
+                                          expense.type == 'spent' ||
+                                          expense.type == 'debited';
+                                      final groupLabel =
+                                          _getGroupForExpense(expense);
+                                      final matchesFilter =
+                                          selectedExpenseNames.isEmpty ||
+                                          matchesExpenseNameFilter(
+                                            expense.name,
+                                            selectedExpenseNames,
+                                          ) ||
+                                          (groupLabel != null &&
+                                              selectedExpenseNames.contains(
+                                                groupLabel,
+                                              ));
+                                      return matchesYear &&
+                                          matchesBank &&
+                                          isNotUnread &&
+                                          isSpent &&
+                                          matchesFilter;
+                                    }).toList()
+                                  : <Expense>[];
+
                               return Column(
                                 children: [
                                   Container(
@@ -5806,37 +5984,237 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                                 letterSpacing: 1.2,
                                               ),
                                             ),
+                                            const Spacer(),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 3,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade100,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: Colors.grey.shade200,
+                                                  width: 0.5,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                children: [
+                                                  GestureDetector(
+                                                    onTap: () {
+                                                      if (_analyticsPageController
+                                                          .hasClients) {
+                                                        _analyticsPageController
+                                                            .animateToPage(
+                                                          0,
+                                                          duration:
+                                                              const Duration(
+                                                            milliseconds: 300,
+                                                          ),
+                                                          curve:
+                                                              Curves.easeInOut,
+                                                        );
+                                                      }
+                                                    },
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3,
+                                                      ),
+                                                      decoration:
+                                                          BoxDecoration(
+                                                        color:
+                                                            _analyticsPageIndex ==
+                                                                    0
+                                                                ? Colors.white
+                                                                : Colors
+                                                                    .transparent,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(9),
+                                                        boxShadow:
+                                                            _analyticsPageIndex ==
+                                                                    0
+                                                                ? [
+                                                                    BoxShadow(
+                                                                      color: Colors
+                                                                          .black
+                                                                          .withValues(
+                                                                            alpha:
+                                                                                0.06,
+                                                                          ),
+                                                                      blurRadius:
+                                                                          4,
+                                                                      offset:
+                                                                          const Offset(
+                                                                        0,
+                                                                        1,
+                                                                      ),
+                                                                    ),
+                                                                  ]
+                                                                : null,
+                                                      ),
+                                                      child: Text(
+                                                        'TREND',
+                                                        style: TextStyle(
+                                                          color:
+                                                              _analyticsPageIndex ==
+                                                                      0
+                                                                  ? gradientColors
+                                                                      .first
+                                                                  : const Color(
+                                                                    0xFF64748B,
+                                                                  ),
+                                                          fontSize: 8.5,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          letterSpacing: 0.5,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  GestureDetector(
+                                                    onTap: () {
+                                                      if (_analyticsPageController
+                                                          .hasClients) {
+                                                        _analyticsPageController
+                                                            .animateToPage(
+                                                          1,
+                                                          duration:
+                                                              const Duration(
+                                                            milliseconds: 300,
+                                                          ),
+                                                          curve:
+                                                              Curves.easeInOut,
+                                                        );
+                                                      }
+                                                    },
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3,
+                                                      ),
+                                                      decoration:
+                                                          BoxDecoration(
+                                                        color:
+                                                            _analyticsPageIndex ==
+                                                                    1
+                                                                ? Colors.white
+                                                                : Colors
+                                                                    .transparent,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(9),
+                                                        boxShadow:
+                                                            _analyticsPageIndex ==
+                                                                    1
+                                                                ? [
+                                                                    BoxShadow(
+                                                                      color: Colors
+                                                                          .black
+                                                                          .withValues(
+                                                                            alpha:
+                                                                                0.06,
+                                                                          ),
+                                                                      blurRadius:
+                                                                          4,
+                                                                      offset:
+                                                                          const Offset(
+                                                                        0,
+                                                                        1,
+                                                                      ),
+                                                                    ),
+                                                                  ]
+                                                                : null,
+                                                      ),
+                                                      child: Text(
+                                                        'YEAR',
+                                                        style: TextStyle(
+                                                          color:
+                                                              _analyticsPageIndex ==
+                                                                      1
+                                                                  ? gradientColors
+                                                                      .first
+                                                                  : const Color(
+                                                                    0xFF64748B,
+                                                                  ),
+                                                          fontSize: 8.5,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          letterSpacing: 0.5,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                           ],
                                         ),
-                                        RepaintBoundary(
-                                          key: _lineChartKey,
-                                          child: ExpenseLineChart(
-                                            debitExpenses: debitExpenses,
-                                            creditExpenses:
-                                                (isCreditCardOverrides[cardName] ??
-                                                    false)
-                                                ? []
-                                                : creditExpenses,
-                                            totalAmount: currentTotal,
-                                            limit:
-                                                (cardBudgetEnabled[cardName] ??
-                                                    true)
-                                                ? ((cardLimits[cardName] ?? 0) >
-                                                          0
-                                                      ? cardLimits[cardName]!
-                                                      : maxValue)
-                                                : maxValue,
-                                            boundaryLimit:
-                                                (cardBudgetEnabled[cardName] ??
-                                                    true)
-                                                ? cardBoundary
-                                                : null,
-                                            selectedMonth: selectedMonth,
-                                            isDueDateFiltered:
-                                                isDueDateFiltered,
-                                            dueDate: cardDueDateVal?.day,
-                                            selectedWeek: selectedWeek,
-                                            cardTheme: getCardTheme(cardName),
+                                        const SizedBox(height: 10),
+                                        SizedBox(
+                                          height: 270,
+                                          child: PageView(
+                                            controller:
+                                                _analyticsPageController,
+                                            onPageChanged: (index) {
+                                              setState(() {
+                                                _analyticsPageIndex = index;
+                                              });
+                                            },
+                                            children: [
+                                              RepaintBoundary(
+                                                key: _lineChartKey,
+                                                child: ExpenseLineChart(
+                                                  debitExpenses:
+                                                      debitExpenses,
+                                                  creditExpenses:
+                                                      (isCreditCardOverrides[cardName] ??
+                                                              false)
+                                                          ? []
+                                                          : creditExpenses,
+                                                  totalAmount: currentTotal,
+                                                  limit:
+                                                      (cardBudgetEnabled[cardName] ??
+                                                              true)
+                                                          ? ((cardLimits[cardName] ??
+                                                                        0) >
+                                                                  0
+                                                              ? cardLimits[cardName]!
+                                                              : maxValue)
+                                                          : maxValue,
+                                                  boundaryLimit:
+                                                      (cardBudgetEnabled[cardName] ??
+                                                              true)
+                                                          ? cardBoundary
+                                                          : null,
+                                                  selectedMonth:
+                                                      selectedMonth,
+                                                  isDueDateFiltered:
+                                                      isDueDateFiltered,
+                                                  dueDate:
+                                                      cardDueDateVal?.day,
+                                                  selectedWeek: selectedWeek,
+                                                  cardTheme: getCardTheme(
+                                                    cardName,
+                                                  ),
+                                                ),
+                                              ),
+                                              YearContributionHeatmap(
+                                                expenses: yearExpenses,
+                                                cardName: cardName,
+                                                themeColor:
+                                                    gradientColors.first,
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
@@ -7927,11 +8305,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                             ),
                           ),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
+                                height: 26,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
-                                  vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFF1F5F9),
@@ -7942,6 +8321,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Container(
                                       width: 12,
@@ -7984,9 +8364,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 },
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
+                                  height: 26,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
-                                    vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
                                     color: showCustomPicker
@@ -8001,6 +8381,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
                                       Icon(
                                         showCustomPicker
@@ -8035,51 +8416,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                       const SizedBox(height: 12),
 
                       if (showCustomPicker) ...[
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              const areaHeightPercent = 0.48;
-                              final pickerHeight =
-                                  (constraints.maxWidth * areaHeightPercent) +
-                                      62.0;
-                              return SizedBox(
-                                height: pickerHeight,
-                                child: ClipRect(
-                                  child: OverflowBox(
-                                    alignment: Alignment.topCenter,
-                                    maxHeight: double.infinity,
-                                    child: ColorPicker(
-                                      pickerColor: Color(selectedColor),
-                                      onColorChanged: (newColor) {
-                                        setDialogState(() {
-                                          selectedColor = newColor.toARGB32();
-                                          colorError = null;
-                                        });
-                                      },
-                                      colorPickerWidth: constraints.maxWidth,
-                                      pickerAreaHeightPercent:
-                                          areaHeightPercent,
-                                      enableAlpha: false,
-                                      displayThumbColor: true,
-                                      paletteType: PaletteType.hsvWithHue,
-                                      labelTypes: const [],
-                                      hexInputBar: false,
-                                      pickerAreaBorderRadius:
-                                          BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                        SimpleColorSliderPicker(
+                          pickerColor: Color(selectedColor),
+                          onColorChanged: (newColor) {
+                            setDialogState(() {
+                              selectedColor = newColor.toARGB32();
+                              colorError = null;
+                            });
+                          },
                         ),
                       ] else ...[
                         Wrap(
@@ -8781,11 +9125,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                             ],
                           ),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
+                                height: 26,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
-                                  vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFF1F5F9),
@@ -8796,6 +9141,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     Container(
                                       width: 12,
@@ -8838,9 +9184,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 },
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
+                                  height: 26,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
-                                    vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
                                     color: showCustomPicker
@@ -8855,6 +9201,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
                                       Icon(
                                         showCustomPicker
@@ -8889,51 +9236,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                       const SizedBox(height: 12),
 
                       if (showCustomPicker) ...[
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              const areaHeightPercent = 0.48;
-                              final pickerHeight =
-                                  (constraints.maxWidth * areaHeightPercent) +
-                                      62.0;
-                              return SizedBox(
-                                height: pickerHeight,
-                                child: ClipRect(
-                                  child: OverflowBox(
-                                    alignment: Alignment.topCenter,
-                                    maxHeight: double.infinity,
-                                    child: ColorPicker(
-                                      pickerColor: Color(selectedColor),
-                                      onColorChanged: (newColor) {
-                                        setDialogState(() {
-                                          selectedColor = newColor.toARGB32();
-                                          colorError = null;
-                                        });
-                                      },
-                                      colorPickerWidth: constraints.maxWidth,
-                                      pickerAreaHeightPercent:
-                                          areaHeightPercent,
-                                      enableAlpha: false,
-                                      displayThumbColor: true,
-                                      paletteType: PaletteType.hsvWithHue,
-                                      labelTypes: const [],
-                                      hexInputBar: false,
-                                      pickerAreaBorderRadius:
-                                          BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                        SimpleColorSliderPicker(
+                          pickerColor: Color(selectedColor),
+                          onColorChanged: (newColor) {
+                            setDialogState(() {
+                              selectedColor = newColor.toARGB32();
+                              colorError = null;
+                            });
+                          },
                         ),
                       ] else ...[
                         Wrap(
@@ -9246,18 +9556,6 @@ LinearGradient getGradientBasedOnValue(double value) {
       begin: Alignment.centerLeft,
       end: Alignment.centerRight,
     );
-  }
-}
-
-Color _getThumbColor(double value) {
-  if (value <= 8000) {
-    return Colors.blue;
-  } else if (value <= 12000) {
-    return Colors.green;
-  } else if (value <= 18000) {
-    return Colors.orange;
-  } else {
-    return Colors.red;
   }
 }
 

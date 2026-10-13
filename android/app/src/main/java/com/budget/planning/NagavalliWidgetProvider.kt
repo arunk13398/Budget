@@ -81,7 +81,7 @@ class NagavalliWidgetProvider : AppWidgetProvider() {
                 views.setProgressBar(activeProgressBar, 100, progress.coerceIn(0, 100), false)
                 
                 val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java, android.net.Uri.parse("homeWidget://open"))
-                views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                views.setOnClickPendingIntent(android.R.id.background, pendingIntent)
                 
                 val syncIntent = HomeWidgetBackgroundIntent.getBroadcast(context, 
                     android.net.Uri.parse("homeWidget://sync"))
@@ -121,7 +121,7 @@ class NagavalliPieWidgetProvider : AppWidgetProvider() {
                 }
                 
                 val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java, android.net.Uri.parse("homeWidget://open"))
-                views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                views.setOnClickPendingIntent(android.R.id.background, pendingIntent)
                 
                 val syncIntent = HomeWidgetBackgroundIntent.getBroadcast(context, android.net.Uri.parse("homeWidget://sync"))
                 views.setOnClickPendingIntent(R.id.btn_sync, syncIntent)
@@ -152,7 +152,7 @@ class NagavalliLineWidgetProvider : AppWidgetProvider() {
                 }
                 
                 val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java, android.net.Uri.parse("homeWidget://open"))
-                views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                views.setOnClickPendingIntent(android.R.id.background, pendingIntent)
                 
                 val syncIntent = HomeWidgetBackgroundIntent.getBroadcast(context, android.net.Uri.parse("homeWidget://sync"))
                 views.setOnClickPendingIntent(R.id.btn_sync, syncIntent)
