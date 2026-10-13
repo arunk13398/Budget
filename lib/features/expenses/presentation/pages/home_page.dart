@@ -30,6 +30,7 @@ import '../widgets/transaction_item.dart';
 import '../widgets/warning_box.dart';
 import '../widgets/year_contribution_heatmap.dart';
 import '../widgets/simple_color_slider_picker.dart';
+import '../widgets/total_budget_overview_card.dart';
 import '../../../../core/services/sms_service.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../dialogs/custom_blue_date_picker_dialog.dart';
@@ -6232,6 +6233,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                     ),
                                   ),
                                   if (cardBudgetEnabled[cardName] ?? true) ...[
+                                    const SizedBox(height: 10),
+                                    TotalBudgetOverviewCard(
+                                      visibleCards: visibleCards,
+                                      expenses: state is ExpenseLoaded
+                                          ? state.data.expenses
+                                          : [],
+                                      selectedMonth: selectedMonth,
+                                      selectedYear: DateTime.now().year,
+                                      selectedCard: cardName,
+                                      selectedCardColors: getCardThemeGradient(cardName),
+                                      cardThemeGradients: Map.fromEntries(
+                                        visibleCards.map(
+                                          (c) => MapEntry(c, getCardThemeGradient(c)),
+                                        ),
+                                      ),
+                                      onCardTap: (selectedCard) {
+                                        HapticFeedback.selectionClick();
+                                        setState(() {
+                                          cardName = selectedCard;
+                                        });
+                                      },
+                                    ),
                                     const SizedBox(height: 10),
                                     Container(
                                        decoration: BoxDecoration(
