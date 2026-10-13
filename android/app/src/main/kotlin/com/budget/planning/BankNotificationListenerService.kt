@@ -460,9 +460,11 @@ class BankNotificationListenerService : NotificationListenerService() {
             val limit = prefs.getFloat(limitKey, 80000f).toDouble()
             val boundary = prefs.getFloat(boundaryKey, 0f).toDouble()
 
-            val remaining = limit - totalSpent
+            val hasBoundary = boundary > 0
+            val effectiveLimit = if (hasBoundary) boundary else limit
+            val remaining = effectiveLimit - totalSpent
             val progress = if (limit > 0) ((totalSpent / limit) * 100).toInt() else 0
-            val isWarning = boundary > 0 && totalSpent >= boundary
+            val isWarning = hasBoundary && totalSpent >= boundary
 
             val monthFormat = SimpleDateFormat("MMM", Locale.US)
             val monthName = monthFormat.format(Date()).uppercase(Locale.ROOT)
@@ -473,6 +475,8 @@ class BankNotificationListenerService : NotificationListenerService() {
             widgetPrefs.edit().apply {
                 putString("current_value", String.format(Locale.US, "%.0f", totalSpent))
                 putString("max_value", String.format(Locale.US, "%.0f", limit))
+                putString("boundary_value", String.format(Locale.US, "%.0f", boundary))
+                putBoolean("has_boundary", hasBoundary)
                 putString("remaining_budget", String.format(Locale.US, "%.0f", remaining))
                 putInt("progress", progress)
                 putString("month_name", monthName)

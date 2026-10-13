@@ -4878,8 +4878,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     final spent = cardExpenses.fold(0.0, (sum, item) => sum + item.amount);
     final limit = cardLimits[targetCard] ?? maxValue;
     final boundary = cardBoundaries[targetCard];
-    final isWarning = boundary != null && boundary > 0 && spent >= boundary;
+    final hasBoundary = boundary != null && boundary > 0;
+    final isWarning = hasBoundary && spent >= boundary;
     final displayCardName = isWarning ? '$targetCard ⚠️' : targetCard;
+    final effectiveLimit = hasBoundary ? boundary : limit;
+    final remainingBudget = effectiveLimit - spent;
 
     try {
       await HomeWidget.saveWidgetData<String>(
@@ -4891,8 +4894,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         limit.toStringAsFixed(0),
       );
       await HomeWidget.saveWidgetData<String>(
+        'boundary_value',
+        hasBoundary ? boundary.toStringAsFixed(0) : "0",
+      );
+      await HomeWidget.saveWidgetData<bool>(
+        'has_boundary',
+        hasBoundary,
+      );
+      await HomeWidget.saveWidgetData<String>(
         'remaining_budget',
-        (limit - spent).toStringAsFixed(0),
+        remainingBudget.toStringAsFixed(0),
       );
       await HomeWidget.saveWidgetData<int>(
         'progress',

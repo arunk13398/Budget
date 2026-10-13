@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="app_widget_background_radius">@android:dimen/system_app_widget_background_radius</dimen>
-    <dimen name="app_widget_inner_radius">@android:dimen/system_app_widget_inner_radius</dimen>
+    <dimen name="app_widget_background_radius">24dp</dimen>
+    <dimen name="app_widget_inner_radius">14dp</dimen>
 </resources>
