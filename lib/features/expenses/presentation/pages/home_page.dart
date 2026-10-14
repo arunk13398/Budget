@@ -2304,7 +2304,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                           ? (hasUpdate
                               ? 'Installed: v${info.currentVersion} • Tap Update to install'
                               : 'Installed: v${info.currentVersion} • Up to date')
-                          : 'Installed: v1.0.0 • Full Permissions',
+                          : 'Installed: v1.0.1 • Full Permissions',
                       style: TextStyle(
                         fontSize: 11.5,
                         color: hasUpdate
@@ -5866,10 +5866,117 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               ),
             ),
           body: SafeArea(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildAppUpdateBanner(),
+            child: Builder(
+              builder: (context) {
+                List<Expense> debitExpenses = [];
+                List<Expense> creditExpenses = [];
+                Color cardThemeColor = gradientColors.first;
+                bool hideCreditData = false;
+
+                if (state is ExpenseLoaded) {
+                  final cardDueDateVal = cardDueDates[cardName];
+                  final filteredExpenses = state.data.expenses.where((expense) {
+                    if (isDueDateFiltered && cardDueDateVal != null) {
+                      final endDate = DateTime(
+                        DateTime.now().year,
+                        selectedMonth + 1,
+                        cardDueDateVal.day,
+                      );
+                      final startDate = DateTime(
+                        endDate.year,
+                        endDate.month - 1,
+                        endDate.day,
+                      );
+                      bool withinRange =
+                          (expense.date.isAfter(startDate) ||
+                              expense.date.isAtSameMomentAs(startDate)) &&
+                          (expense.date.isBefore(endDate) ||
+                              expense.date.isAtSameMomentAs(endDate));
+                      bool matchesBank =
+                          cardName.isEmpty ||
+                          expense.bank.toUpperCase().contains(
+                            cardName.toUpperCase(),
+                          ) ||
+                          cardName.toUpperCase().contains(
+                            expense.bank.toUpperCase(),
+                          );
+                      final groupLabel = _getGroupForExpense(expense);
+                      bool matchesFilter =
+                          selectedExpenseNames.isEmpty ||
+                          matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
+                          (groupLabel != null &&
+                              selectedExpenseNames.contains(groupLabel));
+                      bool matchesWeek = true;
+                      if (selectedWeek != null) {
+                        int day = expense.date.day;
+                        if (selectedWeek == 1 && day > 7) matchesWeek = false;
+                        if (selectedWeek == 2 && (day < 8 || day > 14)) matchesWeek = false;
+                        if (selectedWeek == 3 && (day < 15 || day > 21)) matchesWeek = false;
+                        if (selectedWeek == 4 && day < 22) matchesWeek = false;
+                      }
+
+                      return withinRange &&
+                          matchesWeek &&
+                          matchesBank &&
+                          matchesFilter;
+                    }
+                    bool matchesMonth =
+                        expense.date.month == (selectedMonth + 1) &&
+                        expense.date.year == DateTime.now().year;
+
+                    bool matchesWeek = true;
+                    if (selectedWeek != null) {
+                      int day = expense.date.day;
+                      if (selectedWeek == 1 && day > 7) matchesWeek = false;
+                      if (selectedWeek == 2 && (day < 8 || day > 14)) matchesWeek = false;
+                      if (selectedWeek == 3 && (day < 15 || day > 21)) matchesWeek = false;
+                      if (selectedWeek == 4 && day < 22) matchesWeek = false;
+                    }
+
+                    bool matchesBank =
+                        cardName.isEmpty ||
+                        expense.bank.toUpperCase().contains(
+                          cardName.toUpperCase(),
+                        ) ||
+                        cardName.toUpperCase().contains(
+                          expense.bank.toUpperCase(),
+                        );
+                    final groupLabel = _getGroupForExpense(expense);
+                    bool matchesFilter =
+                        selectedExpenseNames.isEmpty ||
+                        matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
+                        (groupLabel != null &&
+                            selectedExpenseNames.contains(groupLabel));
+                    return matchesMonth &&
+                        matchesWeek &&
+                        matchesBank &&
+                        matchesFilter;
+                  }).toList()..sort(
+                    (a, b) => b.date.compareTo(a.date),
+                  );
+
+                  debitExpenses = filteredExpenses
+                      .where((e) => e.type == 'spent' || e.type == 'debited')
+                      .toList();
+                  creditExpenses = filteredExpenses
+                      .where((e) => e.type == 'credited')
+                      .toList();
+
+                  final gColors = getCardThemeGradient(cardName);
+                  cardThemeColor = gColors.first;
+
+                  hideCreditData =
+                      (hideCreditDataOverrides[cardName] ?? false) ||
+                      (isCreditCardOverrides[cardName] ?? false);
+                }
+
+                return CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
+                          _buildAppUpdateBanner(),
                   Builder(
                     builder: (context) {
                       final visibleGroups = visibleCards
@@ -6865,167 +6972,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         ],
                       ),
                     ),
-                    SizedBox(height: 10),
-                    // Restore Expense List
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      child: Builder(
-                        builder: (context) {
-                          if (state is ExpenseLoading) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          } else if (state is ExpenseLoaded) {
-                            final cardDueDateVal = cardDueDates[cardName];
-                            final filteredExpenses =
-                                state.data.expenses.where((expense) {
-                                  if (isDueDateFiltered &&
-                                      cardDueDateVal != null) {
-                                    final endDate = DateTime(
-                                      DateTime.now().year,
-                                      selectedMonth + 1,
-                                      cardDueDateVal.day,
-                                    );
-                                    final startDate = DateTime(
-                                      endDate.year,
-                                      endDate.month - 1,
-                                      endDate.day,
-                                    );
-                                    bool withinRange =
-                                        (expense.date.isAfter(startDate) ||
-                                            expense.date.isAtSameMomentAs(
-                                              startDate,
-                                            )) &&
-                                        (expense.date.isBefore(endDate) ||
-                                            expense.date.isAtSameMomentAs(
-                                              endDate,
-                                            ));
-                                    bool matchesBank =
-                                        cardName.isEmpty ||
-                                        expense.bank.toUpperCase().contains(
-                                          cardName.toUpperCase(),
-                                        ) ||
-                                        cardName.toUpperCase().contains(
-                                          expense.bank.toUpperCase(),
-                                        );
-                                    final groupLabel = _getGroupForExpense(
-                                      expense,
-                                    );
-                                    bool matchesFilter =
-                                        selectedExpenseNames.isEmpty ||
-                                        matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
-                                        (groupLabel != null &&
-                                            selectedExpenseNames.contains(
-                                              groupLabel,
-                                            ));
-                                    bool matchesWeek = true;
-                                    if (selectedWeek != null) {
-                                      int day = expense.date.day;
-                                      if (selectedWeek == 1 && day > 7)
-                                        matchesWeek = false;
-                                      if (selectedWeek == 2 &&
-                                          (day < 8 || day > 14))
-                                        matchesWeek = false;
-                                      if (selectedWeek == 3 &&
-                                          (day < 15 || day > 21))
-                                        matchesWeek = false;
-                                      if (selectedWeek == 4 && day < 22)
-                                        matchesWeek = false;
-                                    }
-
-                                    return withinRange &&
-                                        matchesWeek &&
-                                        matchesBank &&
-                                        matchesFilter;
-                                  }
-                                  bool matchesMonth =
-                                      expense.date.month ==
-                                          (selectedMonth + 1) &&
-                                      expense.date.year == DateTime.now().year;
-
-                                  bool matchesWeek = true;
-                                  if (selectedWeek != null) {
-                                    int day = expense.date.day;
-                                    if (selectedWeek == 1 && day > 7)
-                                      matchesWeek = false;
-                                    if (selectedWeek == 2 &&
-                                        (day < 8 || day > 14))
-                                      matchesWeek = false;
-                                    if (selectedWeek == 3 &&
-                                        (day < 15 || day > 21))
-                                      matchesWeek = false;
-                                    if (selectedWeek == 4 && day < 22)
-                                      matchesWeek = false;
-                                  }
-
-                                  bool matchesBank =
-                                      cardName.isEmpty ||
-                                      expense.bank.toUpperCase().contains(
-                                        cardName.toUpperCase(),
-                                      ) ||
-                                      cardName.toUpperCase().contains(
-                                        expense.bank.toUpperCase(),
-                                      );
-                                  final groupLabel = _getGroupForExpense(
-                                    expense,
-                                  );
-                                  bool matchesFilter =
-                                      selectedExpenseNames.isEmpty ||
-                                      matchesExpenseNameFilter(expense.name, selectedExpenseNames) ||
-                                      (groupLabel != null &&
-                                          selectedExpenseNames.contains(
-                                            groupLabel,
-                                          ));
-                                  return matchesMonth &&
-                                      matchesWeek &&
-                                      matchesBank &&
-                                      matchesFilter;
-                                }).toList()..sort(
-                                  (a, b) => b.date.compareTo(a.date),
-                                );
-
-                            final debitExpenses = filteredExpenses
-                                .where(
-                                  (e) =>
-                                      e.type == 'spent' || e.type == 'debited',
-                                )
-                                .toList();
-                            final creditExpenses = filteredExpenses
-                                .where((e) => e.type == 'credited')
-                                .toList();
-
-                            final gradientColors = getCardThemeGradient(
-                              cardName,
-                            );
-                            final cardThemeColor = gradientColors.first;
-
-                            final hideCreditData =
-                                (hideCreditDataOverrides[cardName] ?? false) ||
-                                (isCreditCardOverrides[cardName] ?? false);
-
-                            return Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
-                                color: Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.02),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                                border: Border.all(
-                                  color: Colors.grey.shade100,
-                                  width: 1,
-                                ),
-                              ),
-                              child: DefaultTabController(
-                                length: hideCreditData ? 1 : 2,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Padding(
+                    const SizedBox(height: 10),
+                  ],
+                ],
+              ),
+            ),
+            if (visibleCards.isNotEmpty) ...[
+              if (state is ExpenseLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                )
+              else if (state is ExpenseLoaded) ...[
+                PinnedHeaderSliver(
+                  child: Container(
+                    color: Colors.grey.shade50,
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        border: Border(
+                          left: BorderSide(
+                            color: Colors.grey.shade100,
+                            width: 1,
+                          ),
+                          right: BorderSide(
+                            color: Colors.grey.shade100,
+                            width: 1,
+                          ),
+                          top: BorderSide(
+                            color: Colors.grey.shade100,
+                            width: 1,
+                          ),
+                          bottom: BorderSide(
+                            color: Colors.grey.shade200,
+                            width: 0.8,
+                          ),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
                                       padding: const EdgeInsets.all(18),
                                       child: Column(
                                         crossAxisAlignment:
@@ -7782,23 +7785,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                               ],
                                             ),
                                           ),
-                                    // Auto-height List based on selection
-                                    (!hideCreditData &&
-                                            _transactionTabIndex == 1)
-                                        ? _buildTransactionList(creditExpenses)
-                                        : _buildTransactionList(debitExpenses),
-                                  ],
-                                ),
+                                  const SizedBox(height: 8),
+                                ],
                               ),
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ),
-                  ],
-                  if (visibleCards.isEmpty)
-                    Padding(
+                            ),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(15, 0, 15, 30),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: const BorderRadius.vertical(
+                                  bottom: Radius.circular(24),
+                                ),
+                                border: Border(
+                                  left: BorderSide(
+                                    color: Colors.grey.shade100,
+                                    width: 1,
+                                  ),
+                                  right: BorderSide(
+                                    color: Colors.grey.shade100,
+                                    width: 1,
+                                  ),
+                                  bottom: BorderSide(
+                                    color: Colors.grey.shade100,
+                                    width: 1,
+                                  ),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.02),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: (!hideCreditData &&
+                                      _transactionTabIndex == 1)
+                                  ? _buildTransactionList(creditExpenses)
+                                  : _buildTransactionList(debitExpenses),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                    if (visibleCards.isEmpty) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
                       padding: const EdgeInsets.all(18),
                       child: Column(
                         children: [
@@ -8034,13 +8069,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         ],
                       ),
                     ),
-
-                  const SizedBox(height: 30),
+                  ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: 30),
+                  ),
                 ],
-              ),
-            ),
-          ),
-        );
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 
   void _showConfigureCardAlertDialog(BuildContext context) {
