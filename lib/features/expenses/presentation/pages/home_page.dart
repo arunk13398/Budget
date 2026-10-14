@@ -32,6 +32,7 @@ import '../widgets/year_contribution_heatmap.dart';
 import '../widgets/simple_color_slider_picker.dart';
 import '../widgets/total_budget_overview_card.dart';
 import '../../../../core/services/sms_service.dart';
+import '../../../../core/services/app_update_service.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../dialogs/custom_blue_date_picker_dialog.dart';
 import '../../domain/repositories/expense_repository.dart';
@@ -102,6 +103,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Set<String> deletedCards = {};
   Set<String> disabledCards = {};
   bool showBudgetOverview = true;
+  AppUpdateInfo? _availableUpdate;
+  bool _isCheckingUpdate = false;
+  bool _isUpdateDismissed = false;
 
   // Temporary Drawer State
   List<String>? _tempVisibleCards;
@@ -747,6 +751,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       _showCustomSyncToast(count: syncedCount);
     }
 
+    if (AppUpdateService.isUpdateSupported) {
+      _checkForAppUpdate();
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         _scheduleWidgetUpdate();
@@ -1133,6 +1141,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           _buildNotificationPermissionCard(setDrawerState),
           if (SmsService.isSmsSupported)
             _buildSmsPermissionCard(setDrawerState),
+          if (AppUpdateService.isUpdateSupported)
+            _buildAppUpdateCard(setDrawerState),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2221,6 +2231,339 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           ),
         );
       },
+    );
+  }
+
+  Widget _buildAppUpdateCard(StateSetter setDrawerState) {
+    final hasUpdate = _availableUpdate != null;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: hasUpdate ? Colors.amber.shade50 : Colors.blue.shade50.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasUpdate ? Colors.amber.shade300 : Colors.blue.shade200,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: hasUpdate ? Colors.amber.shade100 : Colors.blue.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  hasUpdate ? Icons.system_update_rounded : Icons.info_outline_rounded,
+                  color: hasUpdate ? Colors.amber.shade900 : Colors.blue.shade800,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      hasUpdate
+                          ? 'Update Available: v${_availableUpdate!.latestVersion}'
+                          : 'App Version & Updates',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: hasUpdate ? Colors.amber.shade900 : Colors.blue.shade900,
+                      ),
+                    ),
+                    Text(
+                      hasUpdate
+                          ? 'Tap below to download and install the latest APK.'
+                          : 'GitHub Variant (Full Permissions)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: hasUpdate ? Colors.amber.shade800 : Colors.blue.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isCheckingUpdate
+                  ? null
+                  : () async {
+                      if (hasUpdate) {
+                        di.sl<AppUpdateService>().launchUpdate(_availableUpdate!.downloadUrl);
+                      } else {
+                        await _checkForAppUpdate(showToastIfUpToDate: true);
+                        setDrawerState(() {});
+                      }
+                    },
+              icon: _isCheckingUpdate
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Icon(hasUpdate ? Icons.download_rounded : Icons.refresh_rounded, size: 16),
+              label: Text(
+                _isCheckingUpdate
+                    ? 'Checking...'
+                    : hasUpdate
+                        ? 'Update to v${_availableUpdate!.latestVersion}'
+                        : 'Check for Updates',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: hasUpdate ? const Color(0xFF2563EB) : const Color(0xFF1E3A8A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppUpdateBanner() {
+    if (_availableUpdate == null || _isUpdateDismissed) return const SizedBox.shrink();
+    final update = _availableUpdate!;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.system_update_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Update Available',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade400,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        'v${update.latestVersion}',
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'A newer GitHub release is available.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          ElevatedButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              di.sl<AppUpdateService>().launchUpdate(update.downloadUrl);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF1E3A8A),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text(
+              'Update',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          InkWell(
+            onTap: () {
+              setState(() => _isUpdateDismissed = true);
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.close_rounded,
+                color: Colors.white.withValues(alpha: 0.7),
+                size: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _checkForAppUpdate({bool showToastIfUpToDate = false}) async {
+    if (!AppUpdateService.isUpdateSupported) return;
+    if (mounted) setState(() => _isCheckingUpdate = true);
+    try {
+      final update = await di.sl<AppUpdateService>().checkForUpdate();
+      if (mounted) {
+        setState(() {
+          _availableUpdate = update?.hasUpdate == true ? update : null;
+          _isCheckingUpdate = false;
+        });
+        if (update?.hasUpdate == true) {
+          if (showToastIfUpToDate) {
+            _showUpdateDialog(update!);
+          }
+        } else if (showToastIfUpToDate) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                  SizedBox(width: 10),
+                  Text('You are using the latest version of Spender Pro'),
+                ],
+              ),
+              backgroundColor: Colors.teal.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isCheckingUpdate = false);
+    }
+  }
+
+  void _showUpdateDialog(AppUpdateInfo update) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.system_update_rounded, color: Colors.blue.shade700, size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Text('Update Available', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'A new version (${update.latestVersion}) is available. Current installed version: ${update.currentVersion}.',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+            if (update.releaseNotes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Changelog:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(height: 4),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 120),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    update.releaseNotes,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Later', style: TextStyle(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              di.sl<AppUpdateService>().launchUpdate(update.downloadUrl);
+            },
+            icon: const Icon(Icons.download_rounded, size: 16),
+            label: const Text('Update Now'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -5480,6 +5823,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             child: SingleChildScrollView(
               child: Column(
                 children: [
+                  _buildAppUpdateBanner(),
                   Builder(
                     builder: (context) {
                       final visibleGroups = visibleCards

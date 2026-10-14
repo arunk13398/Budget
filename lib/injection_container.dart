@@ -12,6 +12,7 @@ import 'features/expenses/domain/usecases/get_expenses_usecase.dart';
 import 'features/expenses/domain/usecases/delete_expense_usecase.dart';
 
 import 'core/services/sms_service.dart';
+import 'core/services/app_update_service.dart';
 
 final sl = GetIt.instance;
 
@@ -67,6 +68,9 @@ Future<void> init() async {
   // Services
   if (!sl.isRegistered<SmsService>()) {
     sl.registerLazySingleton(() => SmsService(sl()));
+  }
+  if (!sl.isRegistered<AppUpdateService>()) {
+    sl.registerLazySingleton(() => AppUpdateService());
   }
   
 
