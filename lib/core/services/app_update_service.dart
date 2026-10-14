@@ -37,6 +37,20 @@ class AppUpdateService {
   /// Play Store variants are excluded per Google Play Store update policy.
   static bool get isUpdateSupported => appFlavor != 'playstore';
 
+  static String? _cachedVersion;
+
+  /// Gets the currently installed app version (e.g., '1.0.1').
+  Future<String> getCurrentVersion() async {
+    if (_cachedVersion != null) return _cachedVersion!;
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      _cachedVersion = packageInfo.version;
+      return _cachedVersion!;
+    } catch (_) {
+      return '1.0.1';
+    }
+  }
+
   /// Checks GitHub Releases for a newer version of the application.
   Future<AppUpdateInfo?> checkForUpdate({String? customToken}) async {
     if (kIsWeb || !isUpdateSupported) return null;
