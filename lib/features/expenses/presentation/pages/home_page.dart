@@ -2240,15 +2240,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     final hasUpdate = info?.hasUpdate == true;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: hasUpdate ? Colors.amber.shade50 : Colors.blue.shade50.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
+        color: hasUpdate ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: hasUpdate ? Colors.amber.shade300 : Colors.blue.shade200,
-          width: 1,
+          color: hasUpdate ? const Color(0xFFFCD34D) : const Color(0xFFE2E8F0),
+          width: 1.2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: hasUpdate
+                ? const Color(0xFFF59E0B).withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2258,12 +2266,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: hasUpdate ? Colors.amber.shade100 : Colors.blue.shade100,
+                  color: hasUpdate
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0xFFE2E8F0),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  hasUpdate ? Icons.system_update_rounded : Icons.info_outline_rounded,
-                  color: hasUpdate ? Colors.amber.shade900 : Colors.blue.shade800,
+                  hasUpdate
+                      ? Icons.system_update_rounded
+                      : Icons.verified_rounded,
+                  color: hasUpdate
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFF475569),
                   size: 20,
                 ),
               ),
@@ -2274,24 +2288,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   children: [
                     Text(
                       hasUpdate
-                          ? 'Update Available: v${info!.latestVersion}'
-                          : 'App Version & Updates',
+                          ? 'Update Available (v${info!.latestVersion})'
+                          : 'Spender Pro (GitHub Variant)',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.bold,
-                        color: hasUpdate ? Colors.amber.shade900 : Colors.blue.shade900,
+                        color: hasUpdate
+                            ? const Color(0xFF92400E)
+                            : const Color(0xFF0F172A),
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       info != null
                           ? (hasUpdate
-                              ? 'Installed: v${info.currentVersion} • Latest: v${info.latestVersion}'
-                              : 'Installed: v${info.currentVersion} (Latest)')
-                          : 'GitHub Variant (Full Permissions)',
+                              ? 'Installed: v${info.currentVersion} • Tap Update to install'
+                              : 'Installed: v${info.currentVersion} • Up to date')
+                          : 'Installed: v1.0.0 • Full Permissions',
                       style: TextStyle(
-                        fontSize: 11,
-                        color: hasUpdate ? Colors.amber.shade800 : Colors.blue.shade700,
+                        fontSize: 11.5,
+                        color: hasUpdate
+                            ? const Color(0xFFB45309)
+                            : const Color(0xFF64748B),
                       ),
                     ),
                   ],
@@ -2317,22 +2335,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   ? const SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : Icon(hasUpdate ? Icons.download_rounded : Icons.refresh_rounded, size: 16),
+                  : Icon(
+                      hasUpdate
+                          ? Icons.download_rounded
+                          : Icons.refresh_rounded,
+                      size: 16,
+                    ),
               label: Text(
                 _isCheckingUpdate
-                    ? 'Checking...'
+                    ? 'Checking for updates...'
                     : hasUpdate
                         ? 'Update to v${info!.latestVersion}'
                         : 'Check for Updates',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: hasUpdate ? const Color(0xFF2563EB) : const Color(0xFF1E3A8A),
+                backgroundColor: hasUpdate
+                    ? const Color(0xFF2563EB)
+                    : const Color(0xFF0F172A),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),
@@ -4322,7 +4355,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     );
   }
 
-  Widget _buildTempInfoTab(BuildContext context) {
+  Widget _buildTempInfoTab(BuildContext context, [StateSetter? setDrawerState]) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
@@ -4555,7 +4588,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
+
+          // App Version & Update Card (GitHub Variant)
+          if (AppUpdateService.isUpdateSupported) ...[
+            _buildAppUpdateCard(setDrawerState ?? (fn) => setState(fn)),
+            const SizedBox(height: 14),
+          ],
 
           const Text(
             'HOW THE APPLICATION WORKS',
@@ -5660,7 +5699,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                             children: _tempVisibleCards!.isEmpty
                                 ? [
                                     _buildTempConfigureTab(setDrawerState),
-                                    _buildTempInfoTab(context),
+                                    _buildTempInfoTab(context, setDrawerState),
                                   ]
                                 : [
                                     _buildTempSettingsTab(
@@ -5673,7 +5712,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                     ),
                                     _buildTempFilterTab(setDrawerState, state),
                                     _buildTempConfigureTab(setDrawerState),
-                                    _buildTempInfoTab(context),
+                                    _buildTempInfoTab(context, setDrawerState),
                                   ],
                           ),
                         ),
