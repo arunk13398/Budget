@@ -104,6 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Set<String> disabledCards = {};
   bool showBudgetOverview = true;
   AppUpdateInfo? _availableUpdate;
+  AppUpdateInfo? _latestUpdateInfo;
   bool _isCheckingUpdate = false;
   bool _isUpdateDismissed = false;
 
@@ -2235,7 +2236,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   }
 
   Widget _buildAppUpdateCard(StateSetter setDrawerState) {
-    final hasUpdate = _availableUpdate != null;
+    final info = _latestUpdateInfo;
+    final hasUpdate = info?.hasUpdate == true;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
@@ -2271,7 +2274,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   children: [
                     Text(
                       hasUpdate
-                          ? 'Update Available: v${_availableUpdate!.latestVersion}'
+                          ? 'Update Available: v${info!.latestVersion}'
                           : 'App Version & Updates',
                       style: TextStyle(
                         fontSize: 14,
@@ -2279,9 +2282,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         color: hasUpdate ? Colors.amber.shade900 : Colors.blue.shade900,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      hasUpdate
-                          ? 'Tap below to download and install the latest APK.'
+                      info != null
+                          ? (hasUpdate
+                              ? 'Installed: v${info.currentVersion} • Latest: v${info.latestVersion}'
+                              : 'Installed: v${info.currentVersion} (Latest)')
                           : 'GitHub Variant (Full Permissions)',
                       style: TextStyle(
                         fontSize: 11,
@@ -2300,8 +2306,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               onPressed: _isCheckingUpdate
                   ? null
                   : () async {
-                      if (hasUpdate) {
-                        di.sl<AppUpdateService>().launchUpdate(_availableUpdate!.downloadUrl);
+                      if (hasUpdate && info != null) {
+                        di.sl<AppUpdateService>().launchUpdate(info.downloadUrl);
                       } else {
                         await _checkForAppUpdate(showToastIfUpToDate: true);
                         setDrawerState(() {});
@@ -2318,7 +2324,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 _isCheckingUpdate
                     ? 'Checking...'
                     : hasUpdate
-                        ? 'Update to v${_availableUpdate!.latestVersion}'
+                        ? 'Update to v${info!.latestVersion}'
                         : 'Check for Updates',
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
               ),
@@ -2467,6 +2473,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       final update = await di.sl<AppUpdateService>().checkForUpdate();
       if (mounted) {
         setState(() {
+          _latestUpdateInfo = update;
           _availableUpdate = update?.hasUpdate == true ? update : null;
           _isCheckingUpdate = false;
         });
