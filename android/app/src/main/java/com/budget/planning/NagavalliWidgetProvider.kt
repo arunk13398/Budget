@@ -170,9 +170,9 @@ class NagavalliWidgetProvider : AppWidgetProvider() {
         val displayMetrics = context.resources.displayMetrics
         val displayDensity = displayMetrics.density
         
-        // Exact proportioned canvas (240dp x 140dp) kept safely under Binder IPC limit (~500KB)
+        // Exact proportioned canvas (240dp x 150dp) kept safely under Binder IPC limit (~500KB)
         val width = (240 * displayDensity).toInt().coerceIn(360, 480)
-        val height = (140 * displayDensity).toInt().coerceIn(210, 280)
+        val height = (150 * displayDensity).toInt().coerceIn(225, 300)
         val density = width / 240f
         
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -184,7 +184,7 @@ class NagavalliWidgetProvider : AppWidgetProvider() {
         
         val radius = (width - paddingH * 2) / 2f
         val cx = width / 2f
-        val cy = height - strokeWidth / 2f - 4f * density
+        val cy = height - strokeWidth / 2f - 14f * density
         
         val arcBounds = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
         
@@ -335,29 +335,8 @@ class NagavalliWidgetProvider : AppWidgetProvider() {
             canvas.restore()
         }
         
-        // 6. Hero Texts Centered Inside the Hollow with Exact Reference Spacing:
-        // A. Percentage: e.g. "2%" (Bold, Dark Navy #0B132B)
-        val pctPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#0B132B")
-            textSize = 26f * density
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            textAlign = Paint.Align.CENTER
-        }
-        val pctY = cy - 53f * density
-        canvas.drawText("$pct%", cx, pctY, pctPaint)
-        
-        // B. Subtitle: "TOTAL SPEND" (Bold, Slate Grey #64748B, Letter Spaced)
-        val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#64748B")
-            textSize = 9.5f * density
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = 0.08f
-            textAlign = Paint.Align.CENTER
-        }
-        val subtitleY = pctY + 16f * density
-        canvas.drawText("TOTAL SPEND", cx, subtitleY, subtitlePaint)
-        
-        // C. Spent Amount: Hero Amount (Bold ~28sp, Navy when normal, Red when exceeded)
+        // 6. Hero Texts Centered Inside the Hollow (Decongested & Bottom-Aligned with Curve Bar)
+        // C. Spent Amount: Hero Amount bottom-aligned with the curve bar endpoints
         val spentColor = when {
             isExceeded -> Color.parseColor("#E11D48") // Alert Red when exceeded / warning
             (hasBoundary && valDouble >= boundaryDouble * 0.85) || (limitDouble > 0 && valDouble >= limitDouble * 0.85) -> Color.parseColor("#F59E0B") // Amber approaching limit
@@ -365,11 +344,33 @@ class NagavalliWidgetProvider : AppWidgetProvider() {
         }
         val spentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = spentColor
-            textSize = 28f * density
+            textSize = 27f * density
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
-        val spentY = subtitleY + 24f * density
+        val spentY = cy + 2.5f * density // Aligned with the bottom of the curve bar
+
+        // B. Subtitle: "TOTAL SPEND" (Bold, Slate Grey #64748B, Letter Spaced, ample breathing room)
+        val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#64748B")
+            textSize = 9.5f * density
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            letterSpacing = 0.08f
+            textAlign = Paint.Align.CENTER
+        }
+        val subtitleY = spentY - 29f * density
+
+        // A. Percentage: e.g. "17%" (Bold, Dark Navy #0B132B, comfortable spacing above subtitle)
+        val pctPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#0B132B")
+            textSize = 24f * density
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
+        val pctY = subtitleY - 22f * density
+
+        canvas.drawText("$pct%", cx, pctY, pctPaint)
+        canvas.drawText("TOTAL SPEND", cx, subtitleY, subtitlePaint)
         canvas.drawText(formattedSpent, cx, spentY, spentPaint)
         
         return bitmap

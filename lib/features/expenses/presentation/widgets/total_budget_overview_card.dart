@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../domain/entities/expense.dart';
 
-class TotalBudgetOverviewCard extends StatelessWidget {
+class TotalBudgetOverviewCard extends StatefulWidget {
   final List<String> visibleCards;
   final List<Expense> expenses;
   final int selectedMonth;
@@ -12,6 +12,9 @@ class TotalBudgetOverviewCard extends StatelessWidget {
   final List<Color>? selectedCardColors;
   final Map<String, List<Color>>? cardThemeGradients;
   final Function(String)? onCardTap;
+  final double height;
+  final Color defaultGaugeColor;
+  final bool useMultiColorGauge;
 
   const TotalBudgetOverviewCard({
     super.key,
@@ -23,18 +26,123 @@ class TotalBudgetOverviewCard extends StatelessWidget {
     this.selectedCardColors,
     this.cardThemeGradients,
     this.onCardTap,
+    this.height = 150.0,
+    this.defaultGaugeColor = const Color(0xFFC3F42E),
+    this.useMultiColorGauge = false,
   });
+
+  @override
+  State<TotalBudgetOverviewCard> createState() => _TotalBudgetOverviewCardState();
+}
+
+class _TotalBudgetOverviewCardState extends State<TotalBudgetOverviewCard> {
+  static const double _itemHeight = 29.0;
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _scrollToSelectedCard(animate: false);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant TotalBudgetOverviewCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedCard != widget.selectedCard ||
+        oldWidget.visibleCards != widget.visibleCards) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scrollToSelectedCard(animate: true);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  List<String> _getDisplayCards() {
+    List<String> cards = widget.visibleCards.where((c) => c.trim().isNotEmpty).toList();
+    if (cards.isEmpty) {
+      cards = widget.expenses
+          .map((e) => e.bank.trim())
+          .where((b) => b.isNotEmpty)
+          .toSet()
+          .take(4)
+          .toList();
+    }
+    if (cards.isEmpty) {
+      cards = ['Card 1', 'Card 2', 'Card 3', 'Card 4'];
+    }
+    return cards;
+  }
+
+  bool _isCardSelected(String cardName, String? selectedCard) {
+    if (selectedCard == null || selectedCard.isEmpty) return false;
+    final c1 = cardName.trim().toUpperCase();
+    final c2 = selectedCard.trim().toUpperCase();
+    if (c1 == c2) return true;
+    if (c1.contains(c2) || c2.contains(c1)) return true;
+    final l1 = _formatCardLabel(c1).toUpperCase();
+    final l2 = _formatCardLabel(c2).toUpperCase();
+    return l1 == l2 || l1.contains(l2) || l2.contains(l1);
+  }
+
+  int _getSelectedIndex(List<String> cards) {
+    if (widget.selectedCard == null || cards.isEmpty) return -1;
+    return cards.indexWhere((c) => _isCardSelected(c, widget.selectedCard));
+  }
+
+  void _scrollToSelectedCard({bool animate = true}) {
+    final cards = _getDisplayCards();
+    final index = _getSelectedIndex(cards);
+    if (index >= 0) {
+      _scrollToIndex(index, animate: animate);
+    }
+  }
+
+  void _scrollToIndex(int index, {bool animate = true}) {
+    if (!_scrollController.hasClients || index < 0) return;
+    final position = _scrollController.position;
+    if (!position.hasContentDimensions) return;
+
+    final viewportHeight = position.viewportDimension;
+    // Target offset positions item's vertical center in the middle of viewport
+    final itemCenter = index * _itemHeight + (_itemHeight / 2);
+    final targetOffset = (itemCenter - (viewportHeight / 2))
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+
+    if ((position.pixels - targetOffset).abs() < 1.0) return;
+
+    if (animate) {
+      _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInOutCubic,
+      );
+    } else {
+      _scrollController.jumpTo(targetOffset);
+    }
+  }
 
   String _getDateRangeText() {
     final now = DateTime.now();
-    final monthDate = DateTime(selectedYear, selectedMonth + 1);
+    final monthDate = DateTime(widget.selectedYear, widget.selectedMonth + 1);
     final monthName = DateFormat('MMM').format(monthDate);
 
-    if (now.month == (selectedMonth + 1) && now.year == selectedYear) {
-      return 'Data from 1-${now.day} $monthName, $selectedYear';
+    if (now.month == (widget.selectedMonth + 1) && now.year == widget.selectedYear) {
+      return 'Data from 1-${now.day} $monthName, ${widget.selectedYear}';
     } else {
-      final daysInMonth = DateTime(selectedYear, selectedMonth + 2, 0).day;
-      return 'Data from 1-$daysInMonth $monthName, $selectedYear';
+      final daysInMonth = DateTime(widget.selectedYear, widget.selectedMonth + 2, 0).day;
+      return 'Data from 1-$daysInMonth $monthName, ${widget.selectedYear}';
     }
   }
 
@@ -68,7 +176,7 @@ class TotalBudgetOverviewCard extends StatelessWidget {
 
   double _getCardSpend(String card, int month, int year) {
     final cleanCard = card.trim().toUpperCase();
-    return expenses.where((e) {
+    return widget.expenses.where((e) {
       if (e.date.month != month || e.date.year != year) return false;
       if (e.type != 'spent' && e.type != 'debited') return false;
       final bank = e.bank.trim().toUpperCase();
@@ -79,9 +187,9 @@ class TotalBudgetOverviewCard extends StatelessWidget {
   /// Resolves the segment colors for the gauge graph based on the selected card color
   List<Color> _resolveSegmentColors(List<String> cards) {
     // 1. Resolve base theme colors from selected card
-    final baseColors = selectedCardColors ??
-        (selectedCard != null && cardThemeGradients != null
-            ? cardThemeGradients![selectedCard]
+    final baseColors = widget.selectedCardColors ??
+        (widget.selectedCard != null && widget.cardThemeGradients != null
+            ? widget.cardThemeGradients![widget.selectedCard]
             : null) ??
         const [Color(0xFF1E40AF), Color(0xFF2563EB), Color(0xFF3B82F6)];
 
@@ -102,19 +210,16 @@ class TotalBudgetOverviewCard extends StatelessWidget {
     final palette = [primary, secondary, tertiary, quaternary];
 
     // If individual card themes are provided, allow each to map cleanly
-    if (cardThemeGradients != null && cardThemeGradients!.isNotEmpty) {
+    if (widget.cardThemeGradients != null && widget.cardThemeGradients!.isNotEmpty) {
       final List<Color> result = [];
       for (int i = 0; i < cards.length; i++) {
         final card = cards[i];
-        final isSelected = selectedCard != null &&
-            (card.trim().toUpperCase() == selectedCard!.trim().toUpperCase() ||
-                card.contains(selectedCard!) ||
-                selectedCard!.contains(card));
+        final isSelected = _isCardSelected(card, widget.selectedCard);
 
         if (isSelected) {
           result.add(primary);
-        } else if (cardThemeGradients!.containsKey(card)) {
-          final cList = cardThemeGradients![card]!;
+        } else if (widget.cardThemeGradients!.containsKey(card)) {
+          final cList = widget.cardThemeGradients![card]!;
           result.add(cList.length > 1 ? cList[1] : cList.first);
         } else {
           result.add(palette[(i + 1) % palette.length]);
@@ -131,28 +236,17 @@ class TotalBudgetOverviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 1. Resolve cards to display
-    List<String> cards = visibleCards.where((c) => c.trim().isNotEmpty).toList();
-    if (cards.isEmpty) {
-      cards = expenses
-          .map((e) => e.bank.trim())
-          .where((b) => b.isNotEmpty)
-          .toSet()
-          .take(4)
-          .toList();
-    }
-    if (cards.isEmpty) {
-      cards = ['Card 1', 'Card 2', 'Card 3', 'Card 4'];
-    }
+    final cards = _getDisplayCards();
 
     // 2. Calculate current month spending per card
-    final currentMonthNum = selectedMonth + 1;
-    final cardSpends = cards.map((c) => _getCardSpend(c, currentMonthNum, selectedYear)).toList();
+    final currentMonthNum = widget.selectedMonth + 1;
+    final cardSpends = cards.map((c) => _getCardSpend(c, currentMonthNum, widget.selectedYear)).toList();
 
     // Total spend across all visible cards
     final totalSpend = cardSpends.fold(0.0, (sum, val) => sum + val);
 
     // 3. Calculate previous month spending for comparison
-    final prevDate = DateTime(selectedYear, currentMonthNum - 1, 1);
+    final prevDate = DateTime(widget.selectedYear, currentMonthNum - 1, 1);
     final prevMonthNum = prevDate.month;
     final prevYearNum = prevDate.year;
     final prevTotalSpend = cards
@@ -194,6 +288,7 @@ class TotalBudgetOverviewCard extends StatelessWidget {
     final segmentColors = _resolveSegmentColors(cards);
 
     return Container(
+      height: widget.height,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -209,7 +304,7 @@ class TotalBudgetOverviewCard extends StatelessWidget {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -218,18 +313,17 @@ class TotalBudgetOverviewCard extends StatelessWidget {
             flex: 5,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
                   'Budget Overview',
                   style: TextStyle(
-                    fontSize: 18.5,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF0B132B),
                     letterSpacing: -0.4,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   _getDateRangeText(),
                   style: const TextStyle(
@@ -238,7 +332,7 @@ class TotalBudgetOverviewCard extends StatelessWidget {
                     color: Color(0xFF94A3B8),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 // Trend badge
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -267,76 +361,88 @@ class TotalBudgetOverviewCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                // Interactive Card Legend with active selection indication
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: List.generate(cards.length, (index) {
-                    final cardName = cards[index];
-                    final label = _formatCardLabel(cardName);
-                    final spend = cardSpends[index];
-                    final color = segmentColors[index % segmentColors.length];
-                    final isSelected = selectedCard != null &&
-                        (cardName.trim().toUpperCase() == selectedCard!.trim().toUpperCase() ||
-                            cardName.contains(selectedCard!) ||
-                            selectedCard!.contains(cardName));
+                const SizedBox(height: 8),
+                // Interactive Scrollable Card Legend with active selection indication
+                Expanded(
+                  child: RawScrollbar(
+                    controller: _scrollController,
+                    thumbVisibility: false,
+                    thickness: 2.5,
+                    radius: const Radius.circular(4),
+                    thumbColor: const Color(0xFFCBD5E1),
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      itemCount: cards.length,
+                      itemExtent: _itemHeight,
+                      physics: const BouncingScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      itemBuilder: (context, index) {
+                        final cardName = cards[index];
+                        final label = _formatCardLabel(cardName);
+                        final spend = cardSpends[index];
+                        final color = segmentColors[index % segmentColors.length];
+                        final isSelected = _isCardSelected(cardName, widget.selectedCard);
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: GestureDetector(
-                        onTap: () {
-                          if (onCardTap != null) onCardTap!(cardName);
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          padding: isSelected
-                              ? const EdgeInsets.symmetric(horizontal: 7, vertical: 3)
-                              : const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                          decoration: isSelected
-                              ? BoxDecoration(
-                                  color: color.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: color.withValues(alpha: 0.3),
-                                    width: 1,
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: GestureDetector(
+                            onTap: () {
+                              _scrollToIndex(index, animate: true);
+                              if (widget.onCardTap != null) widget.onCardTap!(cardName);
+                            },
+                            behavior: HitTestBehavior.opaque,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: isSelected
+                                  ? const EdgeInsets.symmetric(horizontal: 7, vertical: 3)
+                                  : const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                              decoration: isSelected
+                                  ? BoxDecoration(
+                                      color: color.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: color.withValues(alpha: 0.3),
+                                        width: 1,
+                                      ),
+                                    )
+                                  : null,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 7.5,
+                                    height: 7.5,
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
-                                )
-                              : null,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
-                                ),
+                                  const SizedBox(width: 5.5),
+                                  Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                      color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF475569),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _formatK(spend),
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: isSelected ? color : const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                label,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                                  color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF475569),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _formatK(spend),
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: isSelected ? color : const Color(0xFF0F172A),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  }),
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -350,56 +456,63 @@ class TotalBudgetOverviewCard extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                final gaugeHeight = (width / 2) + 16.0;
+                final gaugeHeight = math.min(
+                  (width / 2) + 16.0,
+                  constraints.maxHeight > 0 ? constraints.maxHeight : (width / 2) + 16.0,
+                );
 
-                return SizedBox(
-                  width: width,
-                  height: gaugeHeight,
-                  child: Stack(
-                    alignment: Alignment.bottomCenter,
-                    children: [
-                      // Semicircle arc painter using selected card colors
-                      CustomPaint(
-                        size: Size(width, gaugeHeight),
-                        painter: CurvedGaugePainter(
-                          values: cardSpends,
-                          colors: segmentColors,
-                          maxValue: maxScale,
-                          strokeWidth: 20.0,
+                return Center(
+                  child: SizedBox(
+                    width: width,
+                    height: gaugeHeight,
+                    child: Stack(
+                      alignment: Alignment.bottomCenter,
+                      children: [
+                        // Semicircle arc painter using selected card colors
+                        CustomPaint(
+                          size: Size(width, gaugeHeight),
+                          painter: CurvedGaugePainter(
+                            values: cardSpends,
+                            colors: segmentColors,
+                            activeColor: widget.defaultGaugeColor,
+                            useMultiColor: widget.useMultiColorGauge,
+                            maxValue: maxScale,
+                            strokeWidth: 20.0,
+                          ),
                         ),
-                      ),
-                      // Center Content: SPENT + Amount
-                      Positioned(
-                        bottom: 6,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'SPENT',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.5,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                _formatAmountWithDecimals(totalSpend),
-                                style: const TextStyle(
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF0F172A),
-                                  letterSpacing: -0.5,
+                        // Center Content: SPENT + Amount
+                        Positioned(
+                          bottom: 6,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'SPENT',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.5,
+                                  color: Color(0xFF64748B),
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 2),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _formatAmountWithDecimals(totalSpend),
+                                  style: const TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },
@@ -411,106 +524,93 @@ class TotalBudgetOverviewCard extends StatelessWidget {
   }
 }
 
-/// Custom painter for the semicircular curved gauge graph with colored card segments
-/// and clean white divider gaps, dynamically styled with the selected card's color.
+/// Custom painter for the segmented semicircular curved gauge graph with pill-shaped ticks,
+/// dynamically styled with the card's theme color and proportional spend fill.
 class CurvedGaugePainter extends CustomPainter {
   final List<double> values;
   final List<Color> colors;
   final double maxValue;
   final Color trackColor;
-  final Color dividerColor;
-  final double strokeWidth;
+  final Color activeColor;
+  final bool useMultiColor;
+  final int totalSegments;
 
   CurvedGaugePainter({
     required this.values,
-    required this.colors,
+    this.colors = const [],
     required this.maxValue,
+    this.activeColor = const Color(0xFFC3F42E),
     this.trackColor = const Color(0xFFEDF2F7),
-    this.dividerColor = Colors.white,
-    this.strokeWidth = 20.0,
+    this.useMultiColor = false,
+    this.totalSegments = 24,
+    double strokeWidth = 20.0,
+    Color dividerColor = Colors.white,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    final center = Offset(size.width / 2, size.height - 4);
-    final radius = math.min(
-      (size.width / 2) - strokeWidth / 2,
-      size.height - strokeWidth / 2 - 4,
-    );
+    final center = Offset(size.width / 2, size.height - 8);
+    final outerRadius = math.min((size.width / 2) - 8, size.height - 10);
+    if (outerRadius <= 15) return;
 
-    if (radius <= 0) return;
+    // Proportional dimensions for radial pill segments
+    final tickLength = outerRadius * 0.30;
+    final innerRadius = outerRadius - tickLength;
+    final tickWidth = (outerRadius * math.pi / totalSegments) * 0.65;
+    final cornerRadius = tickWidth * 0.40;
 
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    // 1. Draw full 180° background track from math.pi (left) to 0 (right)
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.butt;
-
-    canvas.drawArc(rect, math.pi, math.pi, false, trackPaint);
-
-    final totalValue = values.fold(0.0, (sum, v) => sum + v);
-    if (totalValue <= 0 || maxValue <= 0) return;
-
-    // Fraction filled of the 180° arch
-    final filledFraction = (totalValue / maxValue).clamp(0.0, 1.0);
-    final totalSweep = filledFraction * math.pi;
-
-    // 2. Draw colored segments for each card
-    double currentStart = math.pi;
-    final List<double> boundaryAngles = [];
-
-    for (int i = 0; i < values.length; i++) {
-      final val = values[i];
-      if (val <= 0) continue;
-
-      final fractionOfTotal = val / totalValue;
-      final segmentSweep = fractionOfTotal * totalSweep;
-      if (segmentSweep <= 0) continue;
-
-      final color = colors[i % colors.length];
-      final segmentPaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.butt;
-
-      canvas.drawArc(rect, currentStart, segmentSweep, false, segmentPaint);
-
-      currentStart += segmentSweep;
-      boundaryAngles.add(currentStart);
+    final totalSpend = values.fold(0.0, (sum, v) => sum + v);
+    final fraction = maxValue > 0 ? (totalSpend / maxValue).clamp(0.0, 1.0) : 0.0;
+    int activeSegments = (fraction * totalSegments).round();
+    if (totalSpend > 0 && activeSegments == 0) {
+      activeSegments = 1;
     }
 
-    // 3. Draw clean white radial divider lines at segment boundaries
-    if (boundaryAngles.isNotEmpty) {
-      final dividerPaint = Paint()
-        ..color = dividerColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.5
-        ..strokeCap = StrokeCap.butt;
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.fill;
 
-      final innerR = radius - (strokeWidth / 2) - 1.0;
-      final outerR = radius + (strokeWidth / 2) + 1.0;
+    // Draw all segments from left (pi) around the semicircle to right (2*pi)
+    for (int i = 0; i < totalSegments; i++) {
+      // Angle sweeps from pi (180°, bottom-left) to 2*pi (360°, bottom-right)
+      final theta = math.pi + (i + 0.5) * (math.pi / totalSegments);
 
-      for (int i = 0; i < boundaryAngles.length; i++) {
-        final angle = boundaryAngles[i];
-        // Skip if close to the end of the full arch (0° / 2*pi)
-        if ((angle - 2 * math.pi).abs() < 0.04) continue;
-
-        final p1 = Offset(
-          center.dx + innerR * math.cos(angle),
-          center.dy + innerR * math.sin(angle),
-        );
-        final p2 = Offset(
-          center.dx + outerR * math.cos(angle),
-          center.dy + outerR * math.sin(angle),
-        );
-        canvas.drawLine(p1, p2, dividerPaint);
+      Paint paint;
+      if (i < activeSegments && totalSpend > 0) {
+        if (useMultiColor && colors.isNotEmpty) {
+          // Map this segment index to the appropriate card spend
+          final segmentProgress = (i + 0.5) / activeSegments;
+          double cumulative = 0.0;
+          Color segColor = colors.first;
+          for (int c = 0; c < values.length; c++) {
+            if (values[c] <= 0) continue;
+            cumulative += values[c] / totalSpend;
+            if (segmentProgress <= cumulative || c == values.length - 1) {
+              segColor = colors[c % colors.length];
+              break;
+            }
+          }
+          paint = Paint()
+            ..color = segColor
+            ..style = PaintingStyle.fill;
+        } else {
+          paint = Paint()
+            ..color = activeColor
+            ..style = PaintingStyle.fill;
+        }
+      } else {
+        paint = trackPaint;
       }
+
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(theta);
+      final rect = Rect.fromLTRB(innerRadius, -tickWidth / 2, outerRadius, tickWidth / 2);
+      final rrect = RRect.fromRectAndRadius(rect, Radius.circular(cornerRadius));
+      canvas.drawRRect(rrect, paint);
+      canvas.restore();
     }
   }
 
@@ -519,6 +619,9 @@ class CurvedGaugePainter extends CustomPainter {
     return oldDelegate.values != values ||
         oldDelegate.maxValue != maxValue ||
         oldDelegate.colors != colors ||
-        oldDelegate.strokeWidth != strokeWidth;
+        oldDelegate.activeColor != activeColor ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.useMultiColor != useMultiColor ||
+        oldDelegate.totalSegments != totalSegments;
   }
 }

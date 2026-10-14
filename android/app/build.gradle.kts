@@ -30,6 +30,17 @@ android {
         versionName = "1.0"
     }
 
+    flavorDimensions += "default"
+
+    productFlavors {
+        create("playstore") {
+            dimension = "default"
+        }
+        create("github") {
+            dimension = "default"
+        }
+    }
+
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.exists()) {

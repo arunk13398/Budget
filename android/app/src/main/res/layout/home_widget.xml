@@ -89,7 +89,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginTop="2dp"
-        android:layout_marginBottom="10dp"
+        android:layout_marginBottom="18dp"
         android:scaleType="fitCenter" />
 
     <!-- Bottom Metrics Card (Clean, Symmetrical 50/50 Split - No Icons for Maximum Clarity) -->

@@ -101,6 +101,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Map<String, String> manualCards = {}; // cardName -> msgId
   Set<String> deletedCards = {};
   Set<String> disabledCards = {};
+  bool showBudgetOverview = true;
 
   // Temporary Drawer State
   List<String>? _tempVisibleCards;
@@ -115,6 +116,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Map<String, bool>? _tempHideCreditData;
   Map<String, bool>? _tempIncludeInTotalBudget;
   Map<String, String>? _tempCardThemes;
+  bool? _tempShowBudgetOverview;
   List<String>? _cachedUniqueNames;
   Map<String, List<String>>? _cachedLabelGroups;
   List<String>? _cachedOtherMerchants;
@@ -441,6 +443,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       includeInTotalBudget = newIncludeInTotalBudget;
       cardThemes = newCardThemes;
       manualCards = newManualCards;
+      showBudgetOverview = prefs.getBool('show_budget_overview') ?? true;
 
       categoryGroups = results[0];
 
@@ -475,6 +478,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     await prefs.setStringList('visibleCards', visibleCards);
     await prefs.setStringList('deletedCards', deletedCards.toList());
     await prefs.setStringList('disabledCards', disabledCards.toList());
+    await prefs.setBool('show_budget_overview', showBudgetOverview);
 
     for (final entry in cardLimits.entries) {
       await prefs.setDouble('limit_${entry.key}', entry.value);
@@ -1127,7 +1131,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildNotificationPermissionCard(setDrawerState),
-          _buildSmsPermissionCard(setDrawerState),
+          if (SmsService.isSmsSupported)
+            _buildSmsPermissionCard(setDrawerState),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2470,14 +2475,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           ? _tempCardBoundaries![targetCard]!.toStringAsFixed(0)
           : '',
     );
-    final totalCardLimit = visibleCards.fold(0.0, (sum, bank) {
-      final isIncluded = _tempIncludeInTotalBudget?[bank] ?? true;
-      if (!isIncluded) return sum;
-      final limit = _tempCardLimits![bank] ?? 0;
-      return sum + (limit > 0 ? limit : maxValue);
-    });
-    final totalGroupLimits = groupLimits.values.fold(0.0, (s, v) => s + v);
-    final isBudgetExceeded = totalGroupLimits > totalCardLimit;
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(20),
@@ -3376,6 +3373,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               );
             },
           ),
+          SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTempBudgetTab(StateSetter setDrawerState, ExpenseState state) {
+    final totalCardLimit = visibleCards.fold(0.0, (sum, bank) {
+      final isIncluded = _tempIncludeInTotalBudget?[bank] ?? true;
+      if (!isIncluded) return sum;
+      final limit = _tempCardLimits?[bank] ?? cardLimits[bank] ?? 0;
+      return sum + (limit > 0 ? limit : maxValue);
+    });
+    final totalGroupLimits = groupLimits.values.fold(0.0, (s, v) => s + v);
+    final isBudgetExceeded = totalGroupLimits > totalCardLimit;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSection(
+            'Budget Display',
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Show Budget on Home Screen',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              subtitle: const Text(
+                'Show overview card and budget summary on home screen',
+                style: TextStyle(fontSize: 11),
+              ),
+              value: _tempShowBudgetOverview ?? showBudgetOverview,
+              onChanged: (val) {
+                setDrawerState(() {
+                  _tempShowBudgetOverview = val;
+                });
+              },
+              activeColor: Colors.black,
+              controlAffinity: ListTileControlAffinity.trailing,
+            ),
+          ),
+          const SizedBox(height: 16),
           _buildSection(
             'Budget Allocation',
             Column(
@@ -3606,11 +3650,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               ],
             ),
           ),
+          const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Padding(
-                padding: EdgeInsets.only(left: 4),
+                padding: const EdgeInsets.only(left: 4),
                 child: Text(
                   'LABELS & GROUPS',
                   style: TextStyle(
@@ -3621,19 +3666,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   ),
                 ),
               ),
-              IconButton(
+              ElevatedButton.icon(
                 onPressed: () => _showGroupingDialog(context, targetNames: []),
-                icon: Icon(Icons.add_circle, color: Colors.black),
-                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.add_rounded, size: 14),
+                label: const Text(
+                  'Add Group',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
             ],
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
 
           if (groupColors.isEmpty)
             Container(
               width: double.infinity,
-              padding: EdgeInsets.all(30),
+              padding: const EdgeInsets.all(30),
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(16),
@@ -3646,8 +3708,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     color: Colors.grey.shade300,
                     size: 32,
                   ),
-                  SizedBox(height: 12),
-                  Text(
+                  const SizedBox(height: 12),
+                  const Text(
                     'No custom labels yet',
                     style: TextStyle(
                       color: Colors.grey,
@@ -3680,232 +3742,230 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   shape: const Border(),
                   collapsedShape: const Border(),
                   tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color,
-                  ),
-                ),
-                title: Text(
-                  groupName,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  '₹${groupLimits[groupName]?.toStringAsFixed(0) ?? "0"} limit • ${merchants.length} merchants',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                ),
-                trailing: groupName == 'Unread'
-                    ? const SizedBox()
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Image.asset(
-                              'assets/edit_icon.png',
-                              width: 18,
-                              height: 18,
-                              color: Colors.black,
-                            ),
-                            tooltip: 'Edit Group',
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(),
-                            onPressed: () =>
-                                _showEditGroupDialog(context, groupName),
-                          ),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            color: Colors.red,
-                            icon: const Icon(
-                              Icons.remove_circle_outline_outlined,
-                              color: Colors.black,
-                              size: 20,
-                            ),
-                            tooltip: 'Delete Group',
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(),
-                            onPressed: () async {
-                              final confirm = await _showAttractiveDeleteDialog(
-                                context: context,
-                                title: 'Delete Group',
-                                itemName: groupName,
-                                message:
-                                    'Are you sure you want to delete the group "$groupName"? Merchants assigned to this group will become unassigned.',
-                              );
-                              if (confirm == true) {
-                                setState(() {
-                                  categoryGroups.removeWhere(
-                                    (m, g) => g == groupName,
-                                  );
-                                  transactionGroups.removeWhere(
-                                    (t, g) => g == groupName,
-                                  );
-                                  groupColors.remove(groupName);
-                                  groupLimits.remove(groupName);
-                                  _cachedUniqueNames = null;
-                                  _cachedLabelGroups = null;
-                                });
-                                await _saveSettings();
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (groupName != 'Unread') ...[
-                          Row(
-                            children: [
-                              const Text(
-                                'Monthly Limit:',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextField(
-                                  key: ValueKey('group_limit_$groupName'),
-                                  keyboardType: TextInputType.number,
-                                  style: const TextStyle(fontSize: 13),
-                                  decoration: InputDecoration(
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    isDense: true,
-                                    prefixText: '₹ ',
-                                    hintText:
-                                        groupLimits[groupName]?.toStringAsFixed(
-                                          0,
-                                        ) ??
-                                        'Set budget',
-
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
-                                    ),
-
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
-                                    ),
-
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(
-                                        color: Colors.blue,
-                                        width: 1.5,
-                                      ),
-                                    ),
-
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                  ),
-
-                                  onChanged: (val) async {
-                                    final limit = double.tryParse(val) ?? 0.0;
-                                    setState(() {
-                                      groupLimits[groupName] = limit;
-                                    });
-                                    await _saveSettings();
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        const Text(
-                          'Assigned Merchants:',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: merchants
-                              .map(
-                                (m) => Chip(
-                                  label: Text(
-                                    m,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                                  deleteIcon: const Icon(
-                                    Icons.close,
-                                    size: 12,
-                                    color: Colors.black,
-                                  ),
-                                  onDeleted: () {
-                                    setState(() => categoryGroups.remove(m));
-                                    _saveSettings();
-                                  },
-                                  backgroundColor: Colors.blue.shade50,
-                                  side: BorderSide(
-                                    color: Colors.blue.withOpacity(0.3),
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              )
-                              .toList(),
-                        ),
-                        if (groupName != 'Unread') ...[
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              onPressed: () =>
-                                  _showEditGroupDialog(context, groupName),
-                              icon: Image.asset(
-                                'assets/edit_icon.png',
-                                width: 14,
-                                height: 14,
-                                color: color,
-                              ),
-                              label: const Text(
-                                'Edit Name, Limit & Theme Color',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              style: TextButton.styleFrom(
-                                foregroundColor: color,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
+                  leading: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color,
                     ),
                   ),
-                ],
+                  title: Text(
+                    groupName,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    '₹${groupLimits[groupName]?.toStringAsFixed(0) ?? "0"} limit • ${merchants.length} merchants',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                  trailing: groupName == 'Unread'
+                      ? const SizedBox()
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Image.asset(
+                                'assets/edit_icon.png',
+                                width: 18,
+                                height: 18,
+                                color: Colors.black,
+                              ),
+                              tooltip: 'Edit Group',
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(),
+                              onPressed: () =>
+                                  _showEditGroupDialog(context, groupName),
+                            ),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              color: Colors.red,
+                              icon: const Icon(
+                                Icons.remove_circle_outline_outlined,
+                                color: Colors.black,
+                                size: 20,
+                              ),
+                              tooltip: 'Delete Group',
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(),
+                              onPressed: () async {
+                                final confirm = await _showAttractiveDeleteDialog(
+                                  context: context,
+                                  title: 'Delete Group',
+                                  itemName: groupName,
+                                  message:
+                                      'Are you sure you want to delete the group "$groupName"? Merchants assigned to this group will become unassigned.',
+                                );
+                                if (confirm == true) {
+                                  setState(() {
+                                    categoryGroups.removeWhere(
+                                      (m, g) => g == groupName,
+                                    );
+                                    transactionGroups.removeWhere(
+                                      (t, g) => g == groupName,
+                                    );
+                                    groupColors.remove(groupName);
+                                    groupLimits.remove(groupName);
+                                    _cachedUniqueNames = null;
+                                    _cachedLabelGroups = null;
+                                  });
+                                  setDrawerState(() {});
+                                  await _saveSettings();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (groupName != 'Unread') ...[
+                            Row(
+                              children: [
+                                const Text(
+                                  'Monthly Limit:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    key: ValueKey('group_limit_$groupName'),
+                                    keyboardType: TextInputType.number,
+                                    style: const TextStyle(fontSize: 13),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      isDense: true,
+                                      prefixText: '₹ ',
+                                      hintText:
+                                          groupLimits[groupName]?.toStringAsFixed(
+                                            0,
+                                          ) ??
+                                          'Set budget',
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: const BorderSide(
+                                          color: Colors.blue,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                    ),
+                                    onChanged: (val) async {
+                                      final limit = double.tryParse(val) ?? 0.0;
+                                      setState(() {
+                                        groupLimits[groupName] = limit;
+                                      });
+                                      setDrawerState(() {});
+                                      await _saveSettings();
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          const Text(
+                            'Assigned Merchants:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: merchants
+                                .map(
+                                  (m) => Chip(
+                                    label: Text(
+                                      m,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                    deleteIcon: const Icon(
+                                      Icons.close,
+                                      size: 12,
+                                      color: Colors.black,
+                                    ),
+                                    onDeleted: () {
+                                      setState(() => categoryGroups.remove(m));
+                                      setDrawerState(() {});
+                                      _saveSettings();
+                                    },
+                                    backgroundColor: Colors.blue.shade50,
+                                    side: BorderSide(
+                                      color: Colors.blue.withOpacity(0.3),
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                          if (groupName != 'Unread') ...[
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () =>
+                                    _showEditGroupDialog(context, groupName),
+                                icon: Image.asset(
+                                  'assets/edit_icon.png',
+                                  width: 14,
+                                  height: 14,
+                                  color: color,
+                                ),
+                                label: const Text(
+                                  'Edit Name, Limit & Theme Color',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: color,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
           SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 100),
         ],
       ),
@@ -4155,33 +4215,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               color: Colors.grey,
               letterSpacing: 1.2,
             ),
-          ),
-          const SizedBox(height: 12),
-
-          _buildInfoItem(
-            icon: Icons.mark_email_read_rounded,
-            title: 'TRAI SMS Header Detection',
-            description:
-                'Automatically scans official bank notification titles ending with -S (Service) or -T (Transaction), such as KGBANK-S, HDFCBK-T, and SBICRD-S.',
-            accentColor: Colors.blue.shade600,
-          ),
-          const SizedBox(height: 12),
-
-          _buildInfoItem(
-            icon: Icons.cleaning_services_rounded,
-            title: 'Smart Noise & Ad Filtering',
-            description:
-                'Discards promotional loan ads, credit offers, and post-transaction balance summary messages to keep your feed clean.',
-            accentColor: Colors.purple.shade600,
-          ),
-          const SizedBox(height: 12),
-
-          _buildInfoItem(
-            icon: Icons.merge_type_rounded,
-            title: 'Multi-Notification Deduplication',
-            description:
-                'Automatically detects same-amount SMS alerts within a 2-minute time window and keeps only 1 clean transaction record with full UPI VPA info.',
-            accentColor: Colors.amber.shade700,
           ),
           const SizedBox(height: 12),
 
@@ -5113,12 +5146,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   _tempHideCreditData ??= Map.from(hideCreditDataOverrides);
                   _tempIncludeInTotalBudget ??= Map.from(includeInTotalBudget);
                   _tempCardThemes ??= Map.from(cardThemes);
+                  _tempShowBudgetOverview ??= showBudgetOverview;
 
                   return DefaultTabController(
-                    length: _tempVisibleCards!.isEmpty ? 2 : 4,
+                    length: _tempVisibleCards!.isEmpty ? 2 : 5,
                     initialIndex: _tempVisibleCards!.isEmpty
                         ? 0
-                        : _drawerTabIndex,
+                        : _drawerTabIndex.clamp(0, 4),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -5152,12 +5186,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                             unselectedLabelColor: const Color(0xFF64748B),
                             labelStyle: const TextStyle(
                               fontWeight: FontWeight.w700,
-                              fontSize: 12.5,
+                              fontSize: 12,
                               letterSpacing: -0.2,
                             ),
                             unselectedLabelStyle: const TextStyle(
                               fontWeight: FontWeight.w600,
-                              fontSize: 12.5,
+                              fontSize: 12,
                               letterSpacing: -0.2,
                             ),
                             splashFactory: NoSplash.splashFactory,
@@ -5205,8 +5239,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         child: Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            Icon(Icons.tune_rounded, size: 15),
-                                            SizedBox(width: 4),
+                                            Icon(Icons.tune_rounded, size: 14),
+                                            SizedBox(width: 3),
                                             Text('Settings'),
                                           ],
                                         ),
@@ -5219,9 +5253,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         child: Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            Icon(Icons.filter_list_rounded, size: 15),
-                                            SizedBox(width: 4),
-                                            Text('Settings'),
+                                            Icon(Icons.pie_chart_rounded, size: 14),
+                                            SizedBox(width: 3),
+                                            Text('Budget'),
                                           ],
                                         ),
                                       ),
@@ -5233,8 +5267,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         child: Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            Icon(Icons.credit_card_rounded, size: 15),
-                                            SizedBox(width: 4),
+                                            Icon(Icons.filter_list_rounded, size: 14),
+                                            SizedBox(width: 3),
+                                            Text('Filter'),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Tab(
+                                      height: 40,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.credit_card_rounded, size: 14),
+                                            SizedBox(width: 3),
                                             Text('Configure'),
                                           ],
                                         ),
@@ -5247,8 +5295,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         child: Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            Icon(Icons.info_outline_rounded, size: 15),
-                                            SizedBox(width: 4),
+                                            Icon(Icons.info_outline_rounded, size: 14),
+                                            SizedBox(width: 3),
                                             Text('Info'),
                                           ],
                                         ),
@@ -5266,6 +5314,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   ]
                                 : [
                                     _buildTempSettingsTab(
+                                      setDrawerState,
+                                      state,
+                                    ),
+                                    _buildTempBudgetTab(
                                       setDrawerState,
                                       state,
                                     ),
@@ -5298,6 +5350,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       _cachedUniqueNames = null;
                                       _cachedLabelGroups = null;
                                       _cachedOtherMerchants = null;
+                                      _tempShowBudgetOverview = null;
                                     });
                                     Navigator.pop(context);
                                   },
@@ -5370,6 +5423,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         _tempIncludeInTotalBudget!,
                                       );
                                       cardThemes = Map.from(_tempCardThemes!);
+                                      showBudgetOverview =
+                                          _tempShowBudgetOverview ?? showBudgetOverview;
 
                                       // Reset temp state for next time
                                       _tempVisibleCards = null;
@@ -5384,6 +5439,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       _tempHideCreditData = null;
                                       _tempIncludeInTotalBudget = null;
                                       _tempCardThemes = null;
+                                      _tempShowBudgetOverview = null;
                                       _cachedUniqueNames = null;
                                       _cachedLabelGroups = null;
                                       _cachedOtherMerchants = null;
@@ -5456,7 +5512,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         },
                         onSync: _syncSms,
                         onSettingsTap: (name) => _openDrawer(0, name),
-                        onFilterTap: (name) => _openDrawer(1, name),
+                        onFilterTap: (name) {
+                          if (selectedExpenseNames.isNotEmpty) {
+                            setState(() {
+                              selectedExpenseNames.clear();
+                              _tempSelectedExpenseNames = null;
+                            });
+                          } else {
+                            _openDrawer(2, name);
+                          }
+                        },
                         initialCardName:
                             cardName.isEmpty && visibleGroups.isNotEmpty
                             ? visibleGroups.first.label
@@ -6232,7 +6297,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       ],
                                     ),
                                   ),
-                                  if (cardBudgetEnabled[cardName] ?? true) ...[
+                                  if (showBudgetOverview &&
+                                      (cardBudgetEnabled[cardName] ?? true)) ...[
                                     const SizedBox(height: 10),
                                     TotalBudgetOverviewCard(
                                       visibleCards: visibleCards,
@@ -6938,8 +7004,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                               ),
                                               // Add More Chip (Rule Addition)
                                               InkWell(
-                                                onTap: () =>
-                                                    _openDrawer(0, cardName),
+                                                onTap: () {
+                                                  HapticFeedback.lightImpact();
+                                                  if (selectedExpenseNames.isNotEmpty) {
+                                                    setState(() {
+                                                      selectedExpenseNames.clear();
+                                                      _tempSelectedExpenseNames = null;
+                                                    });
+                                                  } else {
+                                                    _openDrawer(1, cardName);
+                                                  }
+                                                },
+                                                onLongPress: () {
+                                                  HapticFeedback.selectionClick();
+                                                  _openDrawer(0, cardName);
+                                                },
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 child: Container(
@@ -7407,7 +7486,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                 ),
                                 const SizedBox(height: 20),
                                 ElevatedButton.icon(
-                                  onPressed: () => _openDrawer(2),
+                                  onPressed: () => _openDrawer(3),
                                   icon: const Icon(
                                     Icons.tune_rounded,
                                     size: 18,
@@ -7661,7 +7740,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         ),
                         onPressed: () {
                           Navigator.pop(context);
-                          _openDrawer(2);
+                          _openDrawer(3);
                         },
                         icon: const Icon(
                           Icons.tune_rounded,

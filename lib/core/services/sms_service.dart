@@ -44,6 +44,11 @@ class BankSmsGroup {
 }
 
 class SmsService {
+  /// True if direct SMS reading is supported in the current flavor.
+  /// Google Play Store variant disables SMS permissions to comply with Play Store policies.
+  /// GitHub variant has full SMS permissions enabled.
+  static bool get isSmsSupported => appFlavor != 'playstore';
+
   final SmsQuery _query = SmsQuery();
   final Readsms _readSms = Readsms();
   final ExpenseRepository _repository;
@@ -171,7 +176,7 @@ class SmsService {
 
   /// Checks if SMS read permission is granted.
   Future<bool> isSmsPermissionGranted() async {
-    if (kIsWeb) return false;
+    if (kIsWeb || !isSmsSupported) return false;
     try {
       return await Permission.sms.isGranted;
     } catch (_) {
@@ -181,7 +186,7 @@ class SmsService {
 
   /// Requests runtime SMS permission.
   Future<bool> requestSmsPermission() async {
-    if (kIsWeb) return false;
+    if (kIsWeb || !isSmsSupported) return false;
     try {
       final status = await Permission.sms.request();
       return status.isGranted;
@@ -192,7 +197,7 @@ class SmsService {
 
   /// Starts listening for incoming SMS messages.
   void startListening({void Function(Expense expense)? onExpenseAutoSynced, Map<String, String>? manualCards}) {
-    if (kIsWeb) return;
+    if (kIsWeb || !isSmsSupported) return;
     try {
       _readSms.read();
       _readSms.smsStream.listen((sms) async {
@@ -222,7 +227,7 @@ class SmsService {
   /// Requests SMS permissions, fetches matching banking messages from the phone message folder,
   /// and saves them to repository with deduplication. Returns count of newly synced expenses.
   Future<int> readAndPrintSms({int? targetMonth, int? targetYear, Map<String, String>? manualCards}) async {
-    if (kIsWeb) return 0;
+    if (kIsWeb || !isSmsSupported) return 0;
     try {
       var isGranted = await Permission.sms.isGranted;
       if (!isGranted) {

@@ -1,0 +1,136 @@
+name: Deploy GitHub Variant to GitHub Releases
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g., v1.0.0). Leave empty to use pubspec version.'
+        required: false
+        default: ''
+      release_name:
+        description: 'Release title. Leave empty to use tag name.'
+        required: false
+        default: ''
+      release_notes:
+        description: 'Custom release notes / changelog.'
+        required: false
+        default: ''
+      draft:
+        description: 'Create this release as a draft'
+        type: boolean
+        required: false
+        default: false
+      prerelease:
+        description: 'Mark this release as a pre-release'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy GitHub Variant
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 🔍 Resolve Version & Release Info
+        id: get_version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | head -1 | awk '{print $2}' | cut -d'+' -f1)
+          BUILD_NUMBER=$(grep '^version:' pubspec.yaml | head -1 | awk '{print $2}' | cut -d'+' -f2)
+
+          INPUT_TAG="${{ inputs.tag_name }}"
+          INPUT_TITLE="${{ inputs.release_name }}"
+
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v${VERSION}"
+          fi
+
+          if [ -n "$INPUT_TITLE" ]; then
+            TITLE="$INPUT_TITLE"
+          else
+            TITLE="Release ${TAG}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "title=${TITLE}" >> $GITHUB_OUTPUT
+          echo "Resolved Tag: ${TAG}"
+          echo "Resolved Title: ${TITLE}"
+
+      - name: 🔑 Configure Keystore Signing (Optional)
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "Decoding release keystore from GitHub Secrets..."
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+            printf "keyAlias=%s\nkeyPassword=%s\nstoreFile=upload-keystore.jks\nstorePassword=%s\n" \
+              "${{ secrets.ANDROID_KEY_ALIAS }}" \
+              "${{ secrets.ANDROID_KEY_PASSWORD }}" \
+              "${{ secrets.ANDROID_STORE_PASSWORD }}" > android/key.properties
+            echo "key.properties created successfully."
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 secret found. Falling back to debug signing for release build."
+          fi
+
+      - name: 📦 Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: 🔨 Build GitHub Variant APK (Full Permissions)
+        run: flutter build apk --flavor github --release
+
+      - name: 🏷️ Prepare Release Artifacts
+        run: |
+          mkdir -p release-artifacts
+          APK_NAME="SpenderPro-${{ steps.get_version.outputs.tag }}-github.apk"
+          cp build/app/outputs/flutter-apk/app-github-release.apk release-artifacts/${APK_NAME}
+          cd release-artifacts
+          sha256sum ${APK_NAME} > ${APK_NAME}.sha256
+          ls -lh
+
+      - name: 📤 Upload Build Artifact to Workflow Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpenderPro-${{ steps.get_version.outputs.tag }}-github-apk
+          path: release-artifacts/*
+          if-no-files-found: error
+
+      - name: 🚀 Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: ${{ steps.get_version.outputs.title }}
+          body: ${{ inputs.release_notes }}
+          files: release-artifacts/*
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ inputs.prerelease || false }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
