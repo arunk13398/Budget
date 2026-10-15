@@ -6916,7 +6916,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 PinnedHeaderSliver(
                   child: Container(
                     color: Colors.grey.shade50,
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    padding: const EdgeInsets.only(left: 15, right: 15, top: 5),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
