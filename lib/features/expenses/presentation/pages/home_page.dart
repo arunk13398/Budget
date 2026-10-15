@@ -103,7 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Set<String> deletedCards = {};
   Set<String> disabledCards = {};
   bool showBudgetOverview = true;
-  String _installedAppVersion = '1.0.7';
+  String _installedAppVersion = '1.0.8';
   AppUpdateInfo? _availableUpdate;
   AppUpdateInfo? _latestUpdateInfo;
   bool _isCheckingUpdate = false;

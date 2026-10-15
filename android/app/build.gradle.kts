@@ -35,9 +35,13 @@ android {
     productFlavors {
         create("playstore") {
             dimension = "default"
+            versionCode = 2
+            versionName = "1.0.1"
         }
         create("github") {
             dimension = "default"
+            versionCode = flutter.versionCode
+            versionName = flutter.versionName
         }
     }
 
