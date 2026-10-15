@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AppUpdateInfo {
@@ -45,7 +48,7 @@ class AppUpdateService {
       _cachedVersion = packageInfo.version;
       return _cachedVersion!;
     } catch (_) {
-      return '1.0.3';
+      return '1.0.4';
     }
   }
 
@@ -133,7 +136,101 @@ class AppUpdateService {
     return null;
   }
 
-  /// Initiates downloading/installing the updated APK via the system browser/downloader.
+  static const MethodChannel _channel =
+      MethodChannel('com.budget.planning/notifications');
+
+  http.Client? _activeDownloadClient;
+
+  /// Downloads the APK directly inside the app without browser redirect.
+  Future<void> downloadApk({
+    required String downloadUrl,
+    required void Function(double progress, int receivedBytes, int totalBytes)
+        onProgress,
+    required void Function(String filePath) onDone,
+    required void Function(String error) onError,
+  }) async {
+    try {
+      cancelDownload();
+      _activeDownloadClient = http.Client();
+
+      final request = http.Request('GET', Uri.parse(downloadUrl));
+      request.headers['User-Agent'] = 'SpenderPro-AppUpdate';
+
+      final response = await _activeDownloadClient!.send(request);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final tempDir = await getTemporaryDirectory();
+        final filePath = '${tempDir.path}/SpenderPro-update.apk';
+        final file = File(filePath);
+        if (await file.exists()) {
+          try {
+            await file.delete();
+          } catch (_) {}
+        }
+
+        final sink = file.openWrite();
+        final totalBytes = response.contentLength ?? 0;
+        int receivedBytes = 0;
+
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+          final progress = totalBytes > 0 ? (receivedBytes / totalBytes) : 0.0;
+          onProgress(progress, receivedBytes, totalBytes);
+        }
+
+        await sink.flush();
+        await sink.close();
+        _activeDownloadClient = null;
+
+        onDone(filePath);
+      } else {
+        _activeDownloadClient = null;
+        onError('Download failed: HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      _activeDownloadClient = null;
+      onError('Download error: $e');
+    }
+  }
+
+  /// Cancels active download if user dismisses or cancels.
+  void cancelDownload() {
+    try {
+      _activeDownloadClient?.close();
+      _activeDownloadClient = null;
+    } catch (_) {}
+  }
+
+  /// Triggers native Android Package Installer for the downloaded APK.
+  Future<bool> installDownloadedApk(String filePath) async {
+    if (kIsWeb) return false;
+    if (Platform.isAndroid) {
+      try {
+        final result = await _channel.invokeMethod<bool>('installApk', {
+          'filePath': filePath,
+        });
+        return result ?? false;
+      } catch (e) {
+        debugPrint('AppUpdateService: Error installing APK: $e');
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /// Opens Google Play Protect settings in Google Play Store.
+  Future<void> openPlayProtectSettings() async {
+    if (kIsWeb) return;
+    if (Platform.isAndroid) {
+      try {
+        await _channel.invokeMethod('openPlayProtectSettings');
+      } catch (e) {
+        debugPrint('AppUpdateService: Error opening Play Protect: $e');
+      }
+    }
+  }
+
+  /// Fallback: Initiates downloading/installing the updated APK via the system browser.
   Future<bool> launchUpdate(String url) async {
     try {
       final uri = Uri.parse(url);

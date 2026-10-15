@@ -9,6 +9,9 @@
     <!-- Notification permissions for notifications & widgets -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- APK installation permission for in-app updates -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+
     <!-- Remove restricted permissions by default (GitHub flavor re-adds SMS permissions) -->
     <uses-permission android:name="android.permission.SEND_SMS" tools:node="remove"/>
     <uses-permission android:name="android.permission.READ_CELL_BROADCASTS" tools:node="remove"/>

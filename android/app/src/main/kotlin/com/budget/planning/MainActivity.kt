@@ -86,6 +86,19 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(status)
                 }
+                "installApk" -> {
+                    val filePath = call.argument<String>("filePath")
+                    if (filePath != null) {
+                        val success = installApk(filePath)
+                        result.success(success)
+                    } else {
+                        result.error("INVALID_PATH", "File path is null", null)
+                    }
+                }
+                "openPlayProtectSettings" -> {
+                    openPlayProtectSettings()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -240,6 +253,65 @@ class MainActivity : FlutterActivity() {
             Log.d("MainActivity", "Notification posted successfully: id=$notificationId")
         } catch (e: Exception) {
             Log.e("MainActivity", "Error posting notification", e)
+        }
+    }
+
+    private fun installApk(filePath: String): Boolean {
+        Log.d("MainActivity", "installApk: filePath=$filePath")
+        return try {
+            val file = java.io.File(filePath)
+            if (!file.exists()) {
+                Log.e("MainActivity", "APK file does not exist at $filePath")
+                return false
+            }
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                val uri: android.net.Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        this@MainActivity,
+                        "${applicationContext.packageName}.fileprovider",
+                        file
+                    )
+                } else {
+                    android.net.Uri.fromFile(file)
+                }
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error installing APK: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun openPlayProtectSettings() {
+        Log.d("MainActivity", "openPlayProtectSettings called")
+        try {
+            val intent = Intent().apply {
+                setClassName("com.android.vending", "com.google.android.finsky.protect.PlayProtectSettingsActivity")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val playStoreIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = android.net.Uri.parse("https://play.google.com/store/apps")
+                    setPackage("com.android.vending")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(playStoreIntent)
+            } catch (e2: Exception) {
+                try {
+                    startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                } catch (e3: Exception) {
+                    Log.e("MainActivity", "Unable to open security settings: ${e3.message}", e3)
+                }
+            }
         }
     }
 }

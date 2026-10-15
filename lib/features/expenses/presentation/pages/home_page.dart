@@ -103,7 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Set<String> deletedCards = {};
   Set<String> disabledCards = {};
   bool showBudgetOverview = true;
-  String _installedAppVersion = '1.0.3';
+  String _installedAppVersion = '1.0.4';
   AppUpdateInfo? _availableUpdate;
   AppUpdateInfo? _latestUpdateInfo;
   bool _isCheckingUpdate = false;
@@ -2531,71 +2531,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   void _showUpdateDialog(AppUpdateInfo update) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.system_update_rounded, color: Colors.blue.shade700, size: 24),
-            ),
-            const SizedBox(width: 12),
-            const Text('Update Available', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'A new version (${update.latestVersion}) is available. Current installed version: ${update.currentVersion}.',
-              style: const TextStyle(fontSize: 13, height: 1.4),
-            ),
-            if (update.releaseNotes.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('Changelog:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              const SizedBox(height: 4),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 120),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: SingleChildScrollView(
-                  child: Text(
-                    update.releaseNotes,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Later', style: TextStyle(color: Colors.grey.shade600)),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              di.sl<AppUpdateService>().launchUpdate(update.downloadUrl);
-            },
-            icon: const Icon(Icons.download_rounded, size: 16),
-            label: const Text('Update Now'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (context) => _InAppUpdateDialog(update: update),
     );
   }
 
@@ -12074,4 +12011,443 @@ class CardPatternPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CardPatternPainter oldDelegate) =>
       oldDelegate.themeName != themeName;
+}
+
+class _InAppUpdateDialog extends StatefulWidget {
+  final AppUpdateInfo update;
+
+  const _InAppUpdateDialog({required this.update});
+
+  @override
+  State<_InAppUpdateDialog> createState() => _InAppUpdateDialogState();
+}
+
+class _InAppUpdateDialogState extends State<_InAppUpdateDialog> {
+  bool _isDownloading = false;
+  double _progress = 0.0;
+  int _receivedBytes = 0;
+  int _totalBytes = 0;
+  bool _isDownloaded = false;
+  String? _downloadedPath;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    if (_isDownloading) {
+      di.sl<AppUpdateService>().cancelDownload();
+    }
+    super.dispose();
+  }
+
+  void _startDownload() {
+    setState(() {
+      _isDownloading = true;
+      _errorMessage = null;
+      _progress = 0.0;
+      _receivedBytes = 0;
+      _totalBytes = 0;
+    });
+
+    di.sl<AppUpdateService>().downloadApk(
+      downloadUrl: widget.update.downloadUrl,
+      onProgress: (progress, received, total) {
+        if (mounted) {
+          setState(() {
+            _progress = progress;
+            _receivedBytes = received;
+            _totalBytes = total;
+          });
+        }
+      },
+      onDone: (filePath) {
+        if (mounted) {
+          setState(() {
+            _isDownloading = false;
+            _isDownloaded = true;
+            _downloadedPath = filePath;
+          });
+          // Directly trigger native installation without opening a browser
+          di.sl<AppUpdateService>().installDownloadedApk(filePath);
+        }
+      },
+      onError: (error) {
+        if (mounted) {
+          setState(() {
+            _isDownloading = false;
+            _errorMessage = error;
+          });
+        }
+      },
+    );
+  }
+
+  void _installNow() {
+    if (_downloadedPath != null) {
+      di.sl<AppUpdateService>().installDownloadedApk(_downloadedPath!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 10,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header with Icon & Title
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFDBEAFE), width: 1.2),
+                  ),
+                  child: const Icon(
+                    Icons.system_update_rounded,
+                    color: Color(0xFF2563EB),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Update Available',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Spender Pro ${widget.update.latestVersion}',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Clean Version Badges
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Current Installed',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'v${widget.update.currentVersion}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.arrow_forward_rounded, size: 15, color: Colors.blue.shade600),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'New Version',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: const Text(
+                              'NEW',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'v${widget.update.latestVersion}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Play Protect & Installation Notice Card
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.shield_outlined, size: 17, color: Color(0xFFB45309)),
+                      const SizedBox(width: 6),
+                      const Expanded(
+                        child: Text(
+                          'Google Play Protect Notice',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF92400E),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => di.sl<AppUpdateService>().openPlayProtectSettings(),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Text(
+                                'Settings',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFFB45309),
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                              SizedBox(width: 2),
+                              Icon(Icons.launch_rounded, size: 11, color: Color(0xFFB45309)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '• If Play Protect prompts during install, tap "More details" ➔ "Install anyway".\n• To install without restriction: In Play Store ➔ Profile ➔ Play Protect ➔ Settings ⚙️ ➔ disable "Scan apps with Play Protect".',
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.35,
+                      color: Colors.brown.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Progress / Status indicator
+            if (_isDownloading) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Downloading update directly...',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                        ),
+                        Text(
+                          '${(_progress * 100).toInt()}%',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF2563EB)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: _progress > 0 ? _progress : null,
+                        minHeight: 6,
+                        backgroundColor: const Color(0xFFE2E8F0),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+                      ),
+                    ),
+                    if (_totalBytes > 0) ...[
+                      const SizedBox(height: 5),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          '${(_receivedBytes / (1024 * 1024)).toStringAsFixed(1)} MB / ${(_totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ] else if (_isDownloaded) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Download complete! Ready to install.',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF15803D)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ] else if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFFDC2626)),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () {
+                      if (_isDownloading) {
+                        di.sl<AppUpdateService>().cancelDownload();
+                      }
+                      Navigator.pop(context);
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(
+                      _isDownloaded ? 'Close' : 'Later',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: _isDownloading
+                        ? null
+                        : (_isDownloaded ? _installNow : _startDownload),
+                    icon: _isDownloading
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            _isDownloaded ? Icons.install_mobile_rounded : Icons.download_rounded,
+                            size: 16,
+                          ),
+                    label: Text(
+                      _isDownloading
+                          ? 'Downloading...'
+                          : (_isDownloaded ? 'Install Now' : 'Update Now'),
+                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
