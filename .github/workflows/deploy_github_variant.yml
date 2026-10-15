@@ -2,8 +2,6 @@ name: Deploy GitHub Variant to GitHub Releases
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:

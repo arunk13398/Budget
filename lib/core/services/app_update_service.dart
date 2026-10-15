@@ -48,7 +48,7 @@ class AppUpdateService {
       _cachedVersion = packageInfo.version;
       return _cachedVersion!;
     } catch (_) {
-      return '1.0.4';
+      return '1.0.5';
     }
   }
 
@@ -158,8 +158,18 @@ class AppUpdateService {
 
       final response = await _activeDownloadClient!.send(request);
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        final tempDir = await getTemporaryDirectory();
-        final filePath = '${tempDir.path}/SpenderPro-update.apk';
+        Directory saveDir;
+        try {
+          final extDirs = await getExternalCacheDirectories();
+          if (extDirs != null && extDirs.isNotEmpty) {
+            saveDir = extDirs.first;
+          } else {
+            saveDir = await getTemporaryDirectory();
+          }
+        } catch (_) {
+          saveDir = await getTemporaryDirectory();
+        }
+        final filePath = '${saveDir.path}/SpenderPro-update.apk';
         final file = File(filePath);
         if (await file.exists()) {
           try {

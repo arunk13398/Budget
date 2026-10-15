@@ -265,6 +265,8 @@ class MainActivity : FlutterActivity() {
                 return false
             }
 
+            file.setReadable(true, false)
+
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 val uri: android.net.Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     androidx.core.content.FileProvider.getUriForFile(
@@ -278,7 +280,25 @@ class MainActivity : FlutterActivity() {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }
+
+            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                androidx.core.content.FileProvider.getUriForFile(
+                    this,
+                    "${applicationContext.packageName}.fileprovider",
+                    file
+                )
+            } else {
+                android.net.Uri.fromFile(file)
+            }
+
+            val resolveInfoList = packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            for (resolveInfo in resolveInfoList) {
+                val packageName = resolveInfo.activityInfo.packageName
+                grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+
             startActivity(intent)
             true
         } catch (e: Exception) {
