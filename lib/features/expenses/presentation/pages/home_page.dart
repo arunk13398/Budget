@@ -103,7 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Set<String> deletedCards = {};
   Set<String> disabledCards = {};
   bool showBudgetOverview = true;
-  String _installedAppVersion = '1.0.6';
+  String _installedAppVersion = '1.0.7';
   AppUpdateInfo? _availableUpdate;
   AppUpdateInfo? _latestUpdateInfo;
   bool _isCheckingUpdate = false;
@@ -5918,6 +5918,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                           .toList();
                       return CreditCardStack(
                         bankGroups: visibleGroups,
+                        totalDiscoveredCards: _bankGroups.where((g) => !_isCardDeleted(g.label)).length,
                         selectedMonth: selectedMonth,
                         cardLimits: cardLimits,
                         cardBudgetEnabled: cardBudgetEnabled,
@@ -7782,92 +7783,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                             ],
                           ),
                           const SizedBox(height: 16),
-                          // Welcome & Action Container
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(22),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: const Color(0xFFE2E8F0),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.03),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.credit_card_rounded,
-                                    size: 36,
-                                    color: Colors.blue.shade600,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'No Cards Configured',
-                                  style: TextStyle(
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Select your active bank cards from settings to automatically sync SMS and track your monthly spending.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey.shade600,
-                                    height: 1.4,
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                ElevatedButton.icon(
-                                  onPressed: () => _openDrawer(3),
-                                  icon: const Icon(
-                                    Icons.tune_rounded,
-                                    size: 18,
-                                    color: Colors.white,
-                                  ),
-                                  label: const Text(
-                                    'Configure Cards Now',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13.5,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0F172A),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 14,
-                                    ),
-                                    elevation: 4,
-                                    shadowColor: Colors.black.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          // Welcome & Action Container: shows discovered cards if any, or empty configuration prompt
+                          _buildNoCardsView(context),
 
                           const SizedBox(height: 24),
 
@@ -8250,6 +8167,451 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _enableCardDirectly(String cardLabel) async {
+    HapticFeedback.lightImpact();
+    final norm = normalizeBankName(cardLabel);
+    setState(() {
+      if (!visibleCards.contains(cardLabel)) {
+        visibleCards.add(cardLabel);
+      }
+      disabledCards.removeWhere((dc) =>
+          dc.toUpperCase() == cardLabel.toUpperCase() ||
+          dc.toUpperCase() == norm.toUpperCase() ||
+          cardLabel.toUpperCase().contains(dc.toUpperCase()) ||
+          dc.toUpperCase().contains(cardLabel.toUpperCase()));
+
+      if (cardName.isEmpty || !visibleCards.contains(cardName)) {
+        cardName = cardLabel;
+      }
+    });
+
+    await _saveSettings();
+    _scheduleWidgetUpdate();
+    if (mounted) {
+      ref.read(expenseNotifierProvider.notifier).loadExpenses();
+    }
+  }
+
+  Future<void> _enableAllDiscoveredCards(List<BankSmsGroup> groups) async {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      for (final g in groups) {
+        final norm = normalizeBankName(g.label);
+        if (!visibleCards.contains(g.label)) {
+          visibleCards.add(g.label);
+        }
+        disabledCards.removeWhere((dc) =>
+            dc.toUpperCase() == g.label.toUpperCase() ||
+            dc.toUpperCase() == norm.toUpperCase() ||
+            g.label.toUpperCase().contains(dc.toUpperCase()) ||
+            dc.toUpperCase().contains(g.label.toUpperCase()));
+      }
+      if (groups.isNotEmpty &&
+          (cardName.isEmpty || !visibleCards.contains(cardName))) {
+        cardName = groups.first.label;
+      }
+    });
+
+    await _saveSettings();
+    _scheduleWidgetUpdate();
+    if (mounted) {
+      ref.read(expenseNotifierProvider.notifier).loadExpenses();
+    }
+  }
+
+  Widget _buildNoCardsView(BuildContext context) {
+    final discoveredGroups =
+        _bankGroups.where((g) => !_isCardDeleted(g.label)).toList();
+
+    if (discoveredGroups.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: const Color(0xFFE2E8F0),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.credit_card_rounded,
+                size: 36,
+                color: Colors.blue.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No Cards Configured',
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Select your active bank cards from settings to automatically sync SMS and track your monthly spending.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => _openDrawer(3),
+              icon: const Icon(
+                Icons.tune_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
+              label: const Text(
+                'Configure Cards Now',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+                elevation: 4,
+                shadowColor: Colors.black.withValues(
+                  alpha: 0.3,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final totalTxCount = discoveredGroups.fold<int>(
+      0,
+      (sum, g) => sum + g.entries.length,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row with Status badge
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 22,
+                  color: Color(0xFF2563EB),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '${discoveredGroups.length} Cards Discovered',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                              letterSpacing: -0.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECFDF5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFFA7F3D0),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.check_circle_rounded,
+                                size: 10,
+                                color: Color(0xFF059669),
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'SYNCED',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF059669),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      totalTxCount > 0
+                          ? '$totalTxCount transactions found. Enable cards to track.'
+                          : 'SMS sync complete. Enable cards below to view expenses.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.grey.shade600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // Cards List
+          ...discoveredGroups.take(5).map((group) {
+            IconData bankIcon = Icons.credit_card_rounded;
+            final upper = group.label.toUpperCase();
+            if (upper.contains('SBI')) {
+              bankIcon = Icons.account_balance_rounded;
+            } else if (upper.contains('HDFC')) {
+              bankIcon = Icons.payments_rounded;
+            } else if (upper.contains('EPFO')) {
+              bankIcon = Icons.savings_rounded;
+            }
+
+            final txCount = group.entries.length;
+            final isManual = manualCards.containsKey(group.label);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Icon(
+                      bankIcon,
+                      size: 18,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          group.label,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isManual
+                              ? 'Manual card • $txCount tx'
+                              : (txCount > 0
+                                  ? '$txCount transactions recorded'
+                                  : 'Discovered from SMS'),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => _enableCardDirectly(group.label),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      'Enable',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          if (discoveredGroups.length > 5) ...[
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  '+ ${discoveredGroups.length - 5} more cards available in settings',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+
+          // Action Buttons: Enable All & Configure in Settings
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _enableAllDiscoveredCards(discoveredGroups),
+                  icon: const Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  label: Text(
+                    'Enable All (${discoveredGroups.length})',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 1,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => _openDrawer(3),
+                icon: const Icon(
+                  Icons.tune_rounded,
+                  size: 15,
+                  color: Color(0xFF334155),
+                ),
+                label: const Text(
+                  'Settings',
+                  style: TextStyle(
+                    color: Color(0xFF334155),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -10063,10 +10425,12 @@ class CreditCardStack extends ConsumerStatefulWidget {
   final Map<String, String> cardThemes;
   final Map<String, bool> isCreditCardOverrides;
   final Map<String, bool> hideCreditDataOverrides;
+  final int totalDiscoveredCards;
 
   const CreditCardStack({
     super.key,
     required this.bankGroups,
+    this.totalDiscoveredCards = 0,
     required this.selectedMonth,
     required this.cardLimits,
     required this.cardBudgetEnabled,
@@ -10320,8 +10684,10 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
                                 width: 1,
                               ),
                             ),
-                            child: const Icon(
-                              Icons.credit_card_off_rounded,
+                            child: Icon(
+                              widget.totalDiscoveredCards > 0
+                                  ? Icons.account_balance_wallet_rounded
+                                  : Icons.credit_card_off_rounded,
                               color: Colors.white,
                               size: 22,
                             ),
@@ -10332,9 +10698,11 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text(
-                                  'No Bank Card Active',
-                                  style: TextStyle(
+                                Text(
+                                  widget.totalDiscoveredCards > 0
+                                      ? '${widget.totalDiscoveredCards} Cards Discovered'
+                                      : 'No Bank Card Active',
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -10345,7 +10713,9 @@ class _CreditCardStackState extends ConsumerState<CreditCardStack> {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  'Tap Configure below to select cards',
+                                  widget.totalDiscoveredCards > 0
+                                      ? 'Enable cards below to track spending'
+                                      : 'Tap Configure below to select cards',
                                   style: TextStyle(
                                     color: Colors.grey.shade400,
                                     fontSize: 11.5,
@@ -12022,7 +12392,8 @@ class _InAppUpdateDialog extends StatefulWidget {
   State<_InAppUpdateDialog> createState() => _InAppUpdateDialogState();
 }
 
-class _InAppUpdateDialogState extends State<_InAppUpdateDialog> {
+class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
+    with WidgetsBindingObserver {
   bool _isDownloading = false;
   double _progress = 0.0;
   int _receivedBytes = 0;
@@ -12030,13 +12401,164 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog> {
   bool _isDownloaded = false;
   String? _downloadedPath;
   String? _errorMessage;
+  bool _canInstall = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkInstallPermission();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkInstallPermission();
+    }
+  }
+
+  Future<void> _checkInstallPermission() async {
+    final granted =
+        await di.sl<AppUpdateService>().canRequestPackageInstalls();
+    if (mounted) {
+      setState(() => _canInstall = granted);
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_isDownloading) {
       di.sl<AppUpdateService>().cancelDownload();
     }
     super.dispose();
+  }
+
+  Future<void> _checkPermissionAndDownload() async {
+    final canInstall =
+        await di.sl<AppUpdateService>().canRequestPackageInstalls();
+    if (!canInstall && mounted) {
+      await _showPermissionRequiredDialog();
+      return;
+    }
+    _startDownload();
+  }
+
+  Future<void> _showPermissionRequiredDialog() async {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.install_mobile_rounded,
+                color: Color(0xFFD97706),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Permission Required',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Before downloading the update, Android requires permission to install apps directly from Spender Pro.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: Color(0xFF334155),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    'Steps to enable:',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '1. Tap "Open Settings" below.\n2. Turn ON "Allow from this source".\n3. Press back to download the update.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.4,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              di.sl<AppUpdateService>().openUnknownAppSourcesSettings();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 10,
+              ),
+            ),
+            child: const Text(
+              'Open Settings',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _startDownload() {
@@ -12296,7 +12818,44 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+            if (!_canInstall && !_isDownloading && !_isDownloaded) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, size: 17, color: Color(0xFFDC2626)),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Install permission required before downloading.',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF991B1B)),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: _showPermissionRequiredDialog,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Text(
+                          'Configure',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2563EB),
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
 
             // Progress / Status indicator
             if (_isDownloading) ...[
@@ -12414,7 +12973,7 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog> {
                   child: ElevatedButton.icon(
                     onPressed: _isDownloading
                         ? null
-                        : (_isDownloaded ? _installNow : _startDownload),
+                        : (_isDownloaded ? _installNow : _checkPermissionAndDownload),
                     icon: _isDownloading
                         ? const SizedBox(
                             width: 15,

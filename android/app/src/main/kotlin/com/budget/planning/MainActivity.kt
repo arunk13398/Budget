@@ -99,6 +99,18 @@ class MainActivity : FlutterActivity() {
                     openPlayProtectSettings()
                     result.success(true)
                 }
+                "canRequestPackageInstalls" -> {
+                    val canInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        packageManager.canRequestPackageInstalls()
+                    } else {
+                        true
+                    }
+                    result.success(canInstall)
+                }
+                "openUnknownAppSourcesSettings" -> {
+                    openUnknownAppSourcesSettings()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -330,6 +342,28 @@ class MainActivity : FlutterActivity() {
                     })
                 } catch (e3: Exception) {
                     Log.e("MainActivity", "Unable to open security settings: ${e3.message}", e3)
+                }
+            }
+        }
+    }
+
+    private fun openUnknownAppSourcesSettings() {
+        Log.d("MainActivity", "openUnknownAppSourcesSettings called")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = android.net.Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error opening unknown app sources: ${e.message}", e)
+                try {
+                    startActivity(Intent(Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                } catch (e2: Exception) {
+                    Log.e("MainActivity", "Fallback settings error: ${e2.message}", e2)
                 }
             }
         }

@@ -48,7 +48,7 @@ class AppUpdateService {
       _cachedVersion = packageInfo.version;
       return _cachedVersion!;
     } catch (_) {
-      return '1.0.6';
+      return '1.0.7';
     }
   }
 
@@ -226,6 +226,33 @@ class AppUpdateService {
       }
     }
     return false;
+  }
+
+  /// Checks if Android has granted permission to install unknown apps.
+  Future<bool> canRequestPackageInstalls() async {
+    if (kIsWeb) return true;
+    if (Platform.isAndroid) {
+      try {
+        final result = await _channel.invokeMethod<bool>('canRequestPackageInstalls');
+        return result ?? true;
+      } catch (e) {
+        debugPrint('AppUpdateService: Error checking install permission: $e');
+        return true;
+      }
+    }
+    return true;
+  }
+
+  /// Opens the "Install unknown apps" settings screen for Spender Pro.
+  Future<void> openUnknownAppSourcesSettings() async {
+    if (kIsWeb) return;
+    if (Platform.isAndroid) {
+      try {
+        await _channel.invokeMethod('openUnknownAppSourcesSettings');
+      } catch (e) {
+        debugPrint('AppUpdateService: Error opening unknown app sources: $e');
+      }
+    }
   }
 
   /// Opens Google Play Protect settings in Google Play Store.
