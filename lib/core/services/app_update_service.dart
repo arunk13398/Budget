@@ -52,7 +52,7 @@ class AppUpdateService {
 
   /// Checks GitHub Releases for a newer version of the application.
   Future<AppUpdateInfo?> checkForUpdate({String? customToken}) async {
-    if (kIsWeb || !isUpdateSupported) return null;
+    if (kIsWeb) return null;
 
     try {
       final packageInfo = await PackageInfo.fromPlatform();
