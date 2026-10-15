@@ -48,7 +48,7 @@ class AppUpdateService {
       _cachedVersion = packageInfo.version;
       return _cachedVersion!;
     } catch (_) {
-      return '1.0.5';
+      return '1.0.6';
     }
   }
 
