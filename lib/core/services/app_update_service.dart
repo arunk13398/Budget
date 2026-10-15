@@ -33,9 +33,8 @@ class AppUpdateService {
   static const String releasesApiUrl =
       'https://api.github.com/repos/$repoOwner/$repoName/releases/latest';
 
-  /// GitHub variant supports in-app updates directly from GitHub Releases.
-  /// Play Store variants are excluded per Google Play Store update policy.
-  static bool get isUpdateSupported => appFlavor != 'playstore';
+  /// In-app updates are supported across all builds directly from GitHub releases.
+  static bool get isUpdateSupported => !kIsWeb;
 
   static String? _cachedVersion;
 

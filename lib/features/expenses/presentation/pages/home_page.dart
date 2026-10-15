@@ -2247,6 +2247,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 if (hasUpdate && info != null) {
                   _showUpdateDialog(info);
                 } else {
+                  setDrawerState(() {
+                    _isCheckingUpdate = true;
+                  });
                   await _checkForAppUpdate(showToastIfUpToDate: true);
                   setDrawerState(() {});
                 }
@@ -2357,28 +2360,88 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               ),
               const SizedBox(width: 8),
               if (_isCheckingUpdate)
-                const SizedBox.shrink()
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF60A5FA),
+                        ),
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        'Checking',
+                        style: TextStyle(
+                          color: Color(0xFF93C5FD),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
               else if (hasUpdate)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: const Color(0xFF2563EB),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'Update',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11.5,
-                    ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.download_rounded, color: Colors.white, size: 13),
+                      SizedBox(width: 4),
+                      Text(
+                        'Update',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
                   ),
                 )
               else
-                const Icon(
-                  Icons.refresh_rounded,
-                  color: Colors.white70,
-                  size: 20,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.refresh_rounded,
+                        color: Color(0xFF60A5FA),
+                        size: 13,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Check Update',
+                        style: TextStyle(
+                          color: Color(0xFF93C5FD),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -4518,7 +4581,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             ),
           ),
           const SizedBox(height: 14),
-
           // App Version & Update Card
           _buildAppUpdateCard(setDrawerState ?? (fn) => setState(fn)),
           const SizedBox(height: 14),
