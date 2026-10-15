@@ -2,7 +2,7 @@ name: widget_learning
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: ^3.11.0
@@ -11,6 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
 
+  http: ^1.3.0
   cupertino_icons: ^1.0.8
   home_widget: ^0.9.1
   shared_preferences: ^2.2.2

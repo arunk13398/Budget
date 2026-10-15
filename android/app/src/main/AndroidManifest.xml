@@ -2,6 +2,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ✅ PERMISSIONS GO HERE - OUTSIDE application tag -->
+    <!-- Network access permissions -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <!-- Notification permissions for notifications & widgets -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
