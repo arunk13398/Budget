@@ -14,6 +14,9 @@ class TotalBudgetOverviewCard extends StatefulWidget {
   final Function(String)? onCardTap;
   final double height;
   final Color defaultGaugeColor;
+  final Color greenGaugeColor;
+  final Color orangeGaugeColor;
+  final Color redGaugeColor;
   final bool useMultiColorGauge;
 
   const TotalBudgetOverviewCard({
@@ -28,6 +31,9 @@ class TotalBudgetOverviewCard extends StatefulWidget {
     this.onCardTap,
     this.height = 150.0,
     this.defaultGaugeColor = const Color(0xFFC3F42E),
+    this.greenGaugeColor = const Color(0xFF22C55E),
+    this.orangeGaugeColor = const Color(0xFFF97316),
+    this.redGaugeColor = const Color(0xFFEF4444),
     this.useMultiColorGauge = false,
   });
 
@@ -36,7 +42,7 @@ class TotalBudgetOverviewCard extends StatefulWidget {
 }
 
 class _TotalBudgetOverviewCardState extends State<TotalBudgetOverviewCard> {
-  static const double _itemHeight = 29.0;
+  static const double _itemHeight = 27.0;
   late final ScrollController _scrollController;
 
   @override
@@ -304,64 +310,74 @@ class _TotalBudgetOverviewCardState extends State<TotalBudgetOverviewCard> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.only(left: 18, right: 10, top: 13, bottom: 11),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Left Column: Title, Date, Trend & Interactive Card Legend
           Expanded(
-            flex: 5,
+            flex: 9,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Budget Overview',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0B132B),
-                    letterSpacing: -0.4,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: const Text(
+                    'Budget Overview',
+                    style: TextStyle(
+                      fontSize: 17.5,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0B132B),
+                      letterSpacing: -0.4,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _getDateRangeText(),
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF94A3B8),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 5),
+                // Trend badge
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isIncreased ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                        size: 13,
+                        color: isIncreased ? const Color(0xFFEA580C) : const Color(0xFF10B981),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${isIncreased ? '+' : '-'}$diffPct%',
+                        style: TextStyle(
+                          color: isIncreased ? const Color(0xFFEA580C) : const Color(0xFF10B981),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                      const Text(
+                        ' than last month',
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 6),
-                // Trend badge
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isIncreased ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                      size: 13,
-                      color: isIncreased ? const Color(0xFFEA580C) : const Color(0xFF10B981),
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      '${isIncreased ? '+' : '-'}$diffPct%',
-                      style: TextStyle(
-                        color: isIncreased ? const Color(0xFFEA580C) : const Color(0xFF10B981),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                    const Text(
-                      ' than last month',
-                      style: TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
                 // Interactive Scrollable Card Legend with active selection indication
                 Expanded(
                   child: RawScrollbar(
@@ -394,8 +410,8 @@ class _TotalBudgetOverviewCardState extends State<TotalBudgetOverviewCard> {
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               padding: isSelected
-                                  ? const EdgeInsets.symmetric(horizontal: 7, vertical: 3)
-                                  : const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                                  ? const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5)
+                                  : const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5),
                               decoration: isSelected
                                   ? BoxDecoration(
                                       color: color.withValues(alpha: 0.1),
@@ -406,36 +422,39 @@ class _TotalBudgetOverviewCardState extends State<TotalBudgetOverviewCard> {
                                       ),
                                     )
                                   : null,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 7.5,
-                                    height: 7.5,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 7.0,
+                                      height: 7.0,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 5.5),
-                                  Text(
-                                    label,
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                                      color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF475569),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      label,
+                                      style: TextStyle(
+                                        fontSize: 11.0,
+                                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                        color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF475569),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _formatK(spend),
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: isSelected ? color : const Color(0xFF0F172A),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      _formatK(spend),
+                                      style: TextStyle(
+                                        fontSize: 11.0,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected ? color : const Color(0xFF0F172A),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -448,41 +467,63 @@ class _TotalBudgetOverviewCardState extends State<TotalBudgetOverviewCard> {
             ),
           ),
 
-          const SizedBox(width: 14),
+          const SizedBox(width: 6),
 
           // Right Column: Semicircular Curved Gauge Graph themed to selected card
           Expanded(
-            flex: 6,
+            flex: 13,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final gaugeHeight = math.min(
-                  (width / 2) + 16.0,
-                  constraints.maxHeight > 0 ? constraints.maxHeight : (width / 2) + 16.0,
-                );
+                final totalWidth = constraints.maxWidth;
+                final totalHeight = constraints.maxHeight > 0
+                    ? constraints.maxHeight
+                    : ((totalWidth / 2) + 20.0);
 
-                return Center(
-                  child: SizedBox(
-                    width: width,
-                    height: gaugeHeight,
-                    child: Stack(
-                      alignment: Alignment.bottomCenter,
-                      children: [
-                        // Semicircle arc painter using selected card colors
-                        CustomPaint(
-                          size: Size(width, gaugeHeight),
-                          painter: CurvedGaugePainter(
-                            values: cardSpends,
-                            colors: segmentColors,
-                            activeColor: widget.defaultGaugeColor,
-                            useMultiColor: widget.useMultiColorGauge,
-                            maxValue: maxScale,
-                            strokeWidth: 20.0,
-                          ),
+                const totalSegments = 24;
+                final maxRadiusByWidth = (totalWidth / 2) - 2.0;
+                final approxTickWidth = (maxRadiusByWidth * math.pi / totalSegments) * 0.70;
+                final maxRadiusByHeight = totalHeight - (approxTickWidth / 2) - 4.0;
+                final outerRadius = math.max(15.0, math.min(maxRadiusByWidth, maxRadiusByHeight));
+
+                final tickLength = outerRadius * 0.32;
+                final innerRadius = outerRadius - tickLength;
+                final tickWidth = (outerRadius * math.pi / totalSegments) * 0.70;
+
+                final gaugeVisualHeight = outerRadius + (tickWidth / 2);
+                final topMargin = math.max(2.0, (totalHeight - gaugeVisualHeight) / 2);
+                final centerY = topMargin + outerRadius;
+                final center = Offset(totalWidth / 2, centerY);
+
+                return SizedBox(
+                  width: totalWidth,
+                  height: totalHeight,
+                  child: Stack(
+                    children: [
+                      // Semicircle arc painter using selected card colors
+                      CustomPaint(
+                        size: Size(totalWidth, totalHeight),
+                        painter: CurvedGaugePainter(
+                          values: cardSpends,
+                          colors: segmentColors,
+                          activeColor: widget.defaultGaugeColor,
+                          greenColor: widget.greenGaugeColor,
+                          orangeColor: widget.orangeGaugeColor,
+                          redColor: widget.redGaugeColor,
+                          useMultiColor: widget.useMultiColorGauge,
+                          maxValue: maxScale,
+                          totalSegments: totalSegments,
+                          centerOffset: center,
+                          customOuterRadius: outerRadius,
+                          customTickLength: tickLength,
+                          customTickWidth: tickWidth,
                         ),
-                        // Center Content: SPENT + Amount
-                        Positioned(
-                          bottom: 6,
+                      ),
+                      // Center Content: SPENT + Amount
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: centerY - (innerRadius * 0.44) - 20,
+                        child: Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -491,28 +532,31 @@ class _TotalBudgetOverviewCardState extends State<TotalBudgetOverviewCard> {
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w700,
-                                  letterSpacing: 1.5,
+                                  letterSpacing: 1.6,
                                   color: Color(0xFF64748B),
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  _formatAmountWithDecimals(totalSpend),
-                                  style: const TextStyle(
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF0F172A),
-                                    letterSpacing: -0.5,
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _formatAmountWithDecimals(totalSpend),
+                                    style: const TextStyle(
+                                      fontSize: 20.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF0F172A),
+                                      letterSpacing: -0.5,
+                                    ),
                                   ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -532,34 +576,108 @@ class CurvedGaugePainter extends CustomPainter {
   final double maxValue;
   final Color trackColor;
   final Color activeColor;
+  final Color greenColor;
+  final Color orangeColor;
+  final Color redColor;
   final bool useMultiColor;
   final int totalSegments;
+  final Offset? centerOffset;
+  final double? customOuterRadius;
+  final double? customTickLength;
+  final double? customTickWidth;
 
   CurvedGaugePainter({
     required this.values,
     this.colors = const [],
     required this.maxValue,
     this.activeColor = const Color(0xFFC3F42E),
+    this.greenColor = const Color(0xFF22C55E),
+    this.orangeColor = const Color(0xFFF97316),
+    this.redColor = const Color(0xFFEF4444),
     this.trackColor = const Color(0xFFEDF2F7),
     this.useMultiColor = false,
     this.totalSegments = 24,
+    this.centerOffset,
+    this.customOuterRadius,
+    this.customTickLength,
+    this.customTickWidth,
     double strokeWidth = 20.0,
     Color dividerColor = Colors.white,
   });
+
+  Color _getGradientColor({
+    required int index,
+    required int activeSegments,
+    required double spendPct,
+  }) {
+    if (spendPct <= 55.0 || activeSegments <= 1) {
+      if (activeSegments <= 1 && spendPct > 55.0) {
+        if (spendPct <= 75.0) return greenColor;
+        if (spendPct <= 85.0) return orangeColor;
+        return redColor;
+      }
+      return activeColor;
+    }
+
+    final t = index / (activeSegments - 1);
+
+    if (spendPct <= 75.0) {
+      // Below 75: gradient from baseColor (Color(0xFFC3F42E)) to green
+      if (t <= 0.35) {
+        return activeColor;
+      }
+      final localT = (t - 0.35) / 0.65;
+      return Color.lerp(activeColor, greenColor, localT)!;
+    } else if (spendPct <= 85.0) {
+      // Below 85: gradient from baseColor -> green -> orange
+      if (t <= 0.25) {
+        return activeColor;
+      } else if (t <= 0.65) {
+        final localT = (t - 0.25) / 0.40;
+        return Color.lerp(activeColor, greenColor, localT)!;
+      } else {
+        final localT = (t - 0.65) / 0.35;
+        return Color.lerp(greenColor, orangeColor, localT)!;
+      }
+    } else {
+      // Above 85: gradient from baseColor -> green -> orange -> red
+      if (t <= 0.20) {
+        return activeColor;
+      } else if (t <= 0.50) {
+        final localT = (t - 0.20) / 0.30;
+        return Color.lerp(activeColor, greenColor, localT)!;
+      } else if (t <= 0.75) {
+        final localT = (t - 0.50) / 0.25;
+        return Color.lerp(greenColor, orangeColor, localT)!;
+      } else {
+        final localT = (t - 0.75) / 0.25;
+        return Color.lerp(orangeColor, redColor, localT)!;
+      }
+    }
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    final center = Offset(size.width / 2, size.height - 8);
-    final outerRadius = math.min((size.width / 2) - 8, size.height - 10);
+    final outerRadius = customOuterRadius ??
+        math.min((size.width / 2) - 2.0, size.height - 8.0);
     if (outerRadius <= 15) return;
 
-    // Proportional dimensions for radial pill segments
-    final tickLength = outerRadius * 0.30;
+    final tickLength = customTickLength ?? (outerRadius * 0.32);
     final innerRadius = outerRadius - tickLength;
-    final tickWidth = (outerRadius * math.pi / totalSegments) * 0.65;
-    final cornerRadius = tickWidth * 0.40;
+    final tickWidth = customTickWidth ??
+        ((outerRadius * math.pi / totalSegments) * 0.70);
+    final cornerRadius = tickWidth * 0.42;
+
+    final center = centerOffset ??
+        Offset(
+          size.width / 2,
+          math.max(
+            outerRadius + 2.0,
+            (size.height + outerRadius) / 2,
+          ),
+        );
 
     final totalSpend = values.fold(0.0, (sum, v) => sum + v);
     final fraction = maxValue > 0 ? (totalSpend / maxValue).clamp(0.0, 1.0) : 0.0;
@@ -596,8 +714,13 @@ class CurvedGaugePainter extends CustomPainter {
             ..color = segColor
             ..style = PaintingStyle.fill;
         } else {
+          final segColor = _getGradientColor(
+            index: i,
+            activeSegments: activeSegments,
+            spendPct: fraction * 100,
+          );
           paint = Paint()
-            ..color = activeColor
+            ..color = segColor
             ..style = PaintingStyle.fill;
         }
       } else {
@@ -620,8 +743,15 @@ class CurvedGaugePainter extends CustomPainter {
         oldDelegate.maxValue != maxValue ||
         oldDelegate.colors != colors ||
         oldDelegate.activeColor != activeColor ||
+        oldDelegate.greenColor != greenColor ||
+        oldDelegate.orangeColor != orangeColor ||
+        oldDelegate.redColor != redColor ||
         oldDelegate.trackColor != trackColor ||
         oldDelegate.useMultiColor != useMultiColor ||
-        oldDelegate.totalSegments != totalSegments;
+        oldDelegate.totalSegments != totalSegments ||
+        oldDelegate.centerOffset != centerOffset ||
+        oldDelegate.customOuterRadius != customOuterRadius ||
+        oldDelegate.customTickLength != customTickLength ||
+        oldDelegate.customTickWidth != customTickWidth;
   }
 }
