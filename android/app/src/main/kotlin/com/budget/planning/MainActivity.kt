@@ -100,12 +100,7 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 "canRequestPackageInstalls" -> {
-                    val canInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        packageManager.canRequestPackageInstalls()
-                    } else {
-                        true
-                    }
-                    result.success(canInstall)
+                    result.success(canRequestPackageInstalls())
                 }
                 "openUnknownAppSourcesSettings" -> {
                     openUnknownAppSourcesSettings()
@@ -278,7 +273,7 @@ class MainActivity : FlutterActivity() {
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!packageManager.canRequestPackageInstalls()) {
+                if (!canRequestPackageInstalls()) {
                     Log.w("MainActivity", "Install unknown apps permission not granted. Opening settings.")
                     openUnknownAppSourcesSettings()
                     return false
@@ -366,5 +361,45 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private fun canRequestPackageInstalls(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                if (packageManager.canRequestPackageInstalls()) {
+                    return true
+                }
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Error in packageManager.canRequestPackageInstalls: ${e.message}")
+            }
+
+            // Fallback via AppOpsManager check (respects settings toggle even if cached state lags)
+            return try {
+                val appOps = getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+                if (appOps != null) {
+                    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        appOps.unsafeCheckOpNoThrow(
+                            android.app.AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES,
+                            android.os.Process.myUid(),
+                            packageName
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        appOps.checkOpNoThrow(
+                            android.app.AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES,
+                            android.os.Process.myUid(),
+                            packageName
+                        )
+                    }
+                    mode == android.app.AppOpsManager.MODE_ALLOWED
+                } else {
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error checking AppOpsManager: ${e.message}")
+                false
+            }
+        }
+        return true
     }
 }

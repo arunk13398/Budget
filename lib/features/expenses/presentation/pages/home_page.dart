@@ -103,7 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Set<String> deletedCards = {};
   Set<String> disabledCards = {};
   bool showBudgetOverview = true;
-  String _installedAppVersion = '1.0.9';
+  String _installedAppVersion = '1.0.10';
   AppUpdateInfo? _availableUpdate;
   AppUpdateInfo? _latestUpdateInfo;
   bool _isCheckingUpdate = false;
@@ -12531,6 +12531,23 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (_isDownloaded) {
+                _installNow();
+              } else {
+                _startDownload();
+              }
+            },
+            child: Text(
+              _isDownloaded ? 'Install Anyway' : 'Download Anyway',
+              style: TextStyle(
+                color: Colors.blue.shade700,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
