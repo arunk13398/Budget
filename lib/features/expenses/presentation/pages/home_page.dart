@@ -103,7 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Set<String> deletedCards = {};
   Set<String> disabledCards = {};
   bool showBudgetOverview = true;
-  String _installedAppVersion = '1.0.8';
+  String _installedAppVersion = '1.0.9';
   AppUpdateInfo? _availableUpdate;
   AppUpdateInfo? _latestUpdateInfo;
   bool _isCheckingUpdate = false;
@@ -12581,15 +12581,25 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
           });
         }
       },
-      onDone: (filePath) {
+      onDone: (filePath) async {
         if (mounted) {
           setState(() {
             _isDownloading = false;
             _isDownloaded = true;
             _downloadedPath = filePath;
           });
-          // Directly trigger native installation without opening a browser
-          di.sl<AppUpdateService>().installDownloadedApk(filePath);
+          // Check permission and trigger installation
+          final canInstall = await di.sl<AppUpdateService>().canRequestPackageInstalls();
+          if (canInstall) {
+            final success = await di.sl<AppUpdateService>().installDownloadedApk(filePath);
+            if (!success && mounted) {
+              setState(() {
+                _errorMessage = 'Installer did not open. Tap "Install Now" or allow unknown apps in Settings.';
+              });
+            }
+          } else if (mounted) {
+            _showPermissionRequiredDialog();
+          }
         }
       },
       onError: (error) {
@@ -12603,9 +12613,20 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
     );
   }
 
-  void _installNow() {
-    if (_downloadedPath != null) {
-      di.sl<AppUpdateService>().installDownloadedApk(_downloadedPath!);
+  Future<void> _installNow() async {
+    if (_downloadedPath == null) return;
+
+    final canInstall = await di.sl<AppUpdateService>().canRequestPackageInstalls();
+    if (!canInstall && mounted) {
+      await _showPermissionRequiredDialog();
+      return;
+    }
+
+    final success = await di.sl<AppUpdateService>().installDownloadedApk(_downloadedPath!);
+    if (!success && mounted) {
+      setState(() {
+        _errorMessage = 'Unable to launch installer directly. Tap below to download or install via browser.';
+      });
     }
   }
 
@@ -12818,7 +12839,7 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
                 ],
               ),
             ),
-            if (!_canInstall && !_isDownloading && !_isDownloaded) ...[
+            if (!_canInstall && !_isDownloading) ...[
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                 decoration: BoxDecoration(
@@ -12830,10 +12851,12 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
                   children: [
                     const Icon(Icons.warning_amber_rounded, size: 17, color: Color(0xFFDC2626)),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Install permission required before downloading.',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF991B1B)),
+                        _isDownloaded
+                            ? 'Permission to install unknown apps is required.'
+                            : 'Install permission required before downloading.',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF991B1B)),
                       ),
                     ),
                     InkWell(
@@ -12926,7 +12949,9 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
                 ),
               ),
               const SizedBox(height: 14),
-            ] else if (_errorMessage != null) ...[
+            ],
+
+            if (_errorMessage != null) ...[
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
@@ -12934,9 +12959,36 @@ class _InAppUpdateDialogState extends State<_InAppUpdateDialog>
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFFECACA)),
                 ),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(fontSize: 11, color: Color(0xFFDC2626)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(fontSize: 11, color: Color(0xFFDC2626)),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () {
+                        di.sl<AppUpdateService>().launchUpdate(widget.update.downloadUrl);
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.open_in_browser_rounded, size: 14, color: Color(0xFF2563EB)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Open download in Browser',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2563EB),
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 14),

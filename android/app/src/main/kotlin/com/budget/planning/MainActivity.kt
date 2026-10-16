@@ -277,25 +277,17 @@ class MainActivity : FlutterActivity() {
                 return false
             }
 
-            file.setReadable(true, false)
-
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                val uri: android.net.Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    androidx.core.content.FileProvider.getUriForFile(
-                        this@MainActivity,
-                        "${applicationContext.packageName}.fileprovider",
-                        file
-                    )
-                } else {
-                    android.net.Uri.fromFile(file)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!packageManager.canRequestPackageInstalls()) {
+                    Log.w("MainActivity", "Install unknown apps permission not granted. Opening settings.")
+                    openUnknownAppSourcesSettings()
+                    return false
                 }
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }
 
-            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            file.setReadable(true, false)
+
+            val uri: android.net.Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 androidx.core.content.FileProvider.getUriForFile(
                     this,
                     "${applicationContext.packageName}.fileprovider",
@@ -305,10 +297,17 @@ class MainActivity : FlutterActivity() {
                 android.net.Uri.fromFile(file)
             }
 
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addCategory(Intent.CATEGORY_DEFAULT)
+            }
+
             val resolveInfoList = packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
             for (resolveInfo in resolveInfoList) {
                 val packageName = resolveInfo.activityInfo.packageName
-                grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
             startActivity(intent)

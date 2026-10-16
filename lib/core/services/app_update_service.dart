@@ -48,7 +48,7 @@ class AppUpdateService {
       _cachedVersion = packageInfo.version;
       return _cachedVersion!;
     } catch (_) {
-      return '1.0.8';
+      return '1.0.9';
     }
   }
 
@@ -158,17 +158,9 @@ class AppUpdateService {
 
       final response = await _activeDownloadClient!.send(request);
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        Directory saveDir;
-        try {
-          final extDirs = await getExternalCacheDirectories();
-          if (extDirs != null && extDirs.isNotEmpty) {
-            saveDir = extDirs.first;
-          } else {
-            saveDir = await getTemporaryDirectory();
-          }
-        } catch (_) {
-          saveDir = await getTemporaryDirectory();
-        }
+        // Use internal cache directory so FileProvider has full permission to share
+        // without Android 11+ scoped storage / SELinux restrictions
+        final saveDir = await getTemporaryDirectory();
         final filePath = '${saveDir.path}/SpenderPro-update.apk';
         final file = File(filePath);
         if (await file.exists()) {
@@ -234,10 +226,10 @@ class AppUpdateService {
     if (Platform.isAndroid) {
       try {
         final result = await _channel.invokeMethod<bool>('canRequestPackageInstalls');
-        return result ?? true;
+        return result ?? false;
       } catch (e) {
         debugPrint('AppUpdateService: Error checking install permission: $e');
-        return true;
+        return false;
       }
     }
     return true;
