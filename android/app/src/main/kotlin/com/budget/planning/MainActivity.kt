@@ -377,16 +377,17 @@ class MainActivity : FlutterActivity() {
             return try {
                 val appOps = getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
                 if (appOps != null) {
+                    val opString = "android:request_install_packages"
                     val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         appOps.unsafeCheckOpNoThrow(
-                            android.app.AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES,
+                            opString,
                             android.os.Process.myUid(),
                             packageName
                         )
                     } else {
                         @Suppress("DEPRECATION")
                         appOps.checkOpNoThrow(
-                            android.app.AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES,
+                            opString,
                             android.os.Process.myUid(),
                             packageName
                         )
